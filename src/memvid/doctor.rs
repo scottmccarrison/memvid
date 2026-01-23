@@ -37,7 +37,7 @@ fn set_doctor_quiet(quiet: bool) {
 
 /// Check if doctor logging is suppressed.
 fn is_doctor_quiet() -> bool {
-    DOCTOR_QUIET.with(|q| q.get())
+    DOCTOR_QUIET.with(std::cell::Cell::get)
 }
 
 /// Conditionally print doctor debug messages based on quiet flag.
@@ -201,7 +201,7 @@ impl DoctorPlanner {
                     action: DoctorActionKind::HealHeaderPointer,
                     required: true,
                     reasons: vec![DoctorFindingCode::HeaderFooterOffsetMismatch],
-                    note: Some(format!("heal footer offset to {}", offset)),
+                    note: Some(format!("heal footer offset to {offset}")),
                     detail: Some(DoctorActionDetail::HeaderPointer {
                         target_footer_offset: offset,
                     }),
@@ -691,8 +691,7 @@ impl DoctorPlanner {
                 .segment_catalog
                 .vec_segments
                 .first()
-                .map(|s| s.dimension)
-                .unwrap_or(0);
+                .map_or(0, |s| s.dimension);
 
             doctor_log!(
                 "doctor: inspect_vec_index (segment_catalog) segments={} total_vectors={} dim={}",
@@ -723,7 +722,7 @@ impl DoctorPlanner {
                     probe.index.needs_vec = true;
                     probe.findings.push(DoctorFinding::warning(
                         DoctorFindingCode::VecIndexCorrupt,
-                        format!("vec segment {} exceeds safety limit", i),
+                        format!("vec segment {i} exceeds safety limit"),
                     ));
                     continue;
                 }
@@ -734,7 +733,7 @@ impl DoctorPlanner {
                     probe.index.needs_vec = true;
                     probe.findings.push(DoctorFinding::warning(
                         DoctorFindingCode::VecIndexCorrupt,
-                        format!("vec segment {} seek error: {}", i, err),
+                        format!("vec segment {i} seek error: {err}"),
                     ));
                     continue;
                 }
@@ -742,7 +741,7 @@ impl DoctorPlanner {
                     probe.index.needs_vec = true;
                     probe.findings.push(DoctorFinding::warning(
                         DoctorFindingCode::VecIndexCorrupt,
-                        format!("vec segment {} read error: {}", i, err),
+                        format!("vec segment {i} read error: {err}"),
                     ));
                     continue;
                 }
@@ -752,7 +751,7 @@ impl DoctorPlanner {
                     probe.index.needs_vec = true;
                     probe.findings.push(DoctorFinding::warning(
                         DoctorFindingCode::VecIndexCorrupt,
-                        format!("vec segment {} decode error: {}", i, err),
+                        format!("vec segment {i} decode error: {err}"),
                     ));
                 }
             }
@@ -897,7 +896,7 @@ impl DoctorExecutor {
                     doctor_log!("doctor: WAL recovery failed: {}", err);
                     additional_findings.push(DoctorFinding::error(
                         DoctorFindingCode::WalChecksumMismatch,
-                        format!("WAL corrupted and recovery failed: {}", err),
+                        format!("WAL corrupted and recovery failed: {err}"),
                     ));
                     return Ok(DoctorReport {
                         plan,
@@ -937,7 +936,7 @@ impl DoctorExecutor {
                                         );
                                         additional_findings.push(DoctorFinding::error(
                                             DoctorFindingCode::InternalError,
-                                            format!("Aggressive repair succeeded but file still corrupt: {}", retry_err),
+                                            format!("Aggressive repair succeeded but file still corrupt: {retry_err}"),
                                         ));
                                         return Ok(DoctorReport {
                                             plan,
@@ -954,7 +953,7 @@ impl DoctorExecutor {
                                 doctor_log!("doctor: aggressive repair failed: {}", repair_err);
                                 additional_findings.push(DoctorFinding::error(
                                     DoctorFindingCode::InternalError,
-                                    format!("Aggressive repair failed: {}", repair_err),
+                                    format!("Aggressive repair failed: {repair_err}"),
                                 ));
                                 return Ok(DoctorReport {
                                     plan,
@@ -1145,7 +1144,7 @@ impl DoctorExecutor {
                             doctor_log!("doctor: WARNING - final WAL cleanup failed: {}", err);
                             additional_findings.push(DoctorFinding::warning(
                                 DoctorFindingCode::InternalError,
-                                format!("final WAL cleanup failed: {}", err),
+                                format!("final WAL cleanup failed: {err}"),
                             ));
                         } else {
                             doctor_log!("doctor: final WAL cleanup successful");
@@ -1583,7 +1582,7 @@ impl DoctorExecutor {
         let mut buf = [0u8; 8];
         reader.read_exact(&mut buf)?;
 
-        if &buf == FOOTER_MAGIC {
+        if buf == FOOTER_MAGIC {
             doctor_log!(
                 "doctor: [Tier 2] Footer found at expected location: {}",
                 expected_offset
@@ -1600,7 +1599,7 @@ impl DoctorExecutor {
         for offset in (scan_start..file_size.saturating_sub(FOOTER_SIZE)).rev() {
             reader.seek(SeekFrom::Start(offset))?;
             reader.read_exact(&mut buf)?;
-            if &buf == FOOTER_MAGIC {
+            if buf == FOOTER_MAGIC {
                 doctor_log!("doctor: [Tier 2] Footer found at offset: {}", offset);
                 return Ok(offset);
             }
@@ -1616,7 +1615,7 @@ impl DoctorExecutor {
         })
     }
 
-    /// Tier 2 Aggressive Repair: Fix header's footer_offset pointer.
+    /// Tier 2 Aggressive Repair: Fix header's `footer_offset` pointer.
     fn aggressive_header_repair(path: &Path) -> Result<()> {
         doctor_log!("doctor: [Tier 2] Attempting aggressive header repair");
 
@@ -1645,11 +1644,7 @@ impl DoctorExecutor {
         }
 
         // Fix header
-        let mismatch = if actual_footer_offset > header_footer_offset {
-            actual_footer_offset - header_footer_offset
-        } else {
-            header_footer_offset - actual_footer_offset
-        };
+        let mismatch = actual_footer_offset.abs_diff(header_footer_offset);
         doctor_log!(
             "doctor: [Tier 2] Mismatch: {} bytes, repairing...",
             mismatch

@@ -13,6 +13,7 @@ use crate::{MemvidError, Result};
 impl Memvid {
     /// Returns the vector index dimension stored in the MV2 file, if available.
     /// This is useful for auto-detecting which embedding model was used to create the file.
+    #[must_use] 
     pub fn vec_index_dimension(&self) -> Option<u32> {
         self.toc
             .indexes
@@ -63,8 +64,7 @@ impl Memvid {
             (Some(manifest), Some(segment)) if manifest != segment => {
                 Err(MemvidError::InvalidToc {
                     reason: format!(
-                        "vector dimension mismatch between manifest ({}) and segment catalog ({})",
-                        manifest, segment
+                        "vector dimension mismatch between manifest ({manifest}) and segment catalog ({segment})"
                     )
                     .into(),
                 })
@@ -132,7 +132,7 @@ impl Memvid {
         if len == 0 {
             "<binary payload: 0 bytes>".into()
         } else {
-            format!("<binary payload: {} bytes>", len)
+            format!("<binary payload: {len} bytes>")
         }
     }
 

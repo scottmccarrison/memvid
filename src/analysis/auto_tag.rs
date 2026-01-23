@@ -2,7 +2,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use std::collections::{BTreeMap, BTreeSet};
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 
 #[derive(Debug, Clone, Default)]
@@ -41,8 +40,8 @@ impl AutoTagger {
 }
 
 fn extract_keywords(text: &str, limit: usize) -> Vec<String> {
-    static TOKEN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)[a-z0-9][a-z0-9'-]+").unwrap());
-    static STOPWORDS: Lazy<BTreeSet<&'static str>> = Lazy::new(|| {
+    static TOKEN_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| Regex::new(r"(?i)[a-z0-9][a-z0-9'-]+").unwrap());
+    static STOPWORDS: std::sync::LazyLock<BTreeSet<&'static str>> = std::sync::LazyLock::new(|| {
         [
             "the",
             "and",
@@ -133,8 +132,8 @@ fn extract_keywords(text: &str, limit: usize) -> Vec<String> {
 }
 
 fn derive_labels(text: &str, limit: usize) -> Vec<String> {
-    static PHRASE_RE: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"(?m)^(?P<phrase>[A-Z][A-Za-z0-9 &/-]{3,})$").unwrap());
+    static PHRASE_RE: std::sync::LazyLock<Regex> =
+        std::sync::LazyLock::new(|| Regex::new(r"(?m)^(?P<phrase>[A-Z][A-Za-z0-9 &/-]{3,})$").unwrap());
 
     let mut labels = BTreeSet::new();
     for caps in PHRASE_RE.captures_iter(text) {
@@ -168,19 +167,19 @@ fn extract_dates(text: &str) -> Vec<String> {
     // 2. ISO dates: 2024-09-01
     // 3. US format: 09/01/2024
     // 4. Spelled out: September 1, 2024 or Sept 1, 2024 or 1 September 2024
-    static DATE_RE: Lazy<Regex> = Lazy::new(|| {
+    static DATE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
         Regex::new(r"(?i)\b((?:19|20)\d{2}|\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})\b").unwrap()
     });
 
     // Match spelled-out dates like "September 1, 2024", "Sept 10, 2024", "September 1st, 2024"
-    static SPELLED_DATE_RE: Lazy<Regex> = Lazy::new(|| {
+    static SPELLED_DATE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
         Regex::new(
             r"(?i)\b((?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+(?:19|20)\d{2})\b"
         ).unwrap()
     });
 
     // Match European format: "1 September 2024", "1st September 2024"
-    static EURO_DATE_RE: Lazy<Regex> = Lazy::new(|| {
+    static EURO_DATE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
         Regex::new(
             r"(?i)\b(\d{1,2}(?:st|nd|rd|th)?\s+(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?\s+(?:19|20)\d{2})\b"
         ).unwrap()

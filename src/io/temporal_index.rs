@@ -298,6 +298,8 @@ pub fn read_track<R: Read + Seek>(
         });
     }
 
+    // Safe: length validated against MAX_TEMPORAL_TRACK_BYTES (16 GiB) on line 247
+    // and HEADER_SIZE is constant, so result fits in usize
     let mut body = vec![0u8; (length - HEADER_SIZE as u64) as usize];
     reader.read_exact(&mut body)?;
 
@@ -313,9 +315,11 @@ pub fn read_track<R: Read + Seek>(
         });
     }
 
+    // Safe: counts validated by checked_mul and total_expected == length check above
     let mut mentions = Vec::with_capacity(entry_count as usize);
     let mut anchors = Vec::with_capacity(anchor_count as usize);
 
+    // Safe: validated by checked_mul overflow check on line 283
     let mentions_bytes = expected_entries_bytes as usize;
     for chunk in body[..mentions_bytes].chunks_exact(MENTION_RECORD_SIZE) {
         let raw = RawMention::decode(chunk)?;

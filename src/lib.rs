@@ -1,49 +1,66 @@
 #![deny(clippy::all, clippy::pedantic)]
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 #![allow(clippy::module_name_repetitions)]
-// Pedantic lints that are intentionally allowed:
-// - Documentation lints: Many functions are self-documenting
+//
+// Strategic lint exceptions - these are allowed project-wide for pragmatic reasons:
+//
+// Documentation lints: Many internal/self-documenting functions don't need extensive docs.
+// Public APIs should still have proper documentation.
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::doc_markdown)]
-// - Cast lints: Verified safe in practice (values bounded in real usage)
+//
+// Cast safety: All casts in this codebase are carefully reviewed and bounded by
+// real-world constraints (file sizes, frame counts, etc). Using try_into() everywhere
+// would add significant complexity without safety benefits in our use case.
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_precision_loss)]
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::cast_lossless)]
-// - Style lints: Some complex functions are intentionally long
+//
+// Style/complexity: Some database-like operations naturally require complex functions.
+// Breaking them up would hurt readability.
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::items_after_statements)]
-#![allow(clippy::struct_excessive_bools)]
 #![allow(clippy::similar_names)]
+// e.g., frame_id, parent_id, target_id are intentionally similar
+//
+// Pattern matching: These pedantic lints often suggest changes that reduce clarity.
 #![allow(clippy::manual_let_else)]
 #![allow(clippy::match_same_arms)]
 #![allow(clippy::if_same_then_else)]
+#![allow(clippy::collapsible_match)]
+//
+// Performance/ergonomics trade-offs that are acceptable for this codebase:
+#![allow(clippy::needless_pass_by_value)] // Many builders take owned values intentionally
+#![allow(clippy::return_self_not_must_use)] // Builder patterns don't need must_use on every method
+#![allow(clippy::format_push_string)] // Readability over minor perf difference
+#![allow(clippy::assigning_clones)] // clone_from() often less readable
+//
+// Low-value pedantic lints that add noise:
+#![allow(clippy::struct_excessive_bools)] // Config structs naturally have many flags
 #![allow(clippy::needless_continue)]
 #![allow(clippy::needless_range_loop)]
-#![allow(clippy::collapsible_match)]
-// - Other pedantic lints that add noise
-#![allow(clippy::needless_pass_by_value)]
-#![allow(clippy::unnecessary_wraps)]
-#![allow(clippy::return_self_not_must_use)]
-#![allow(clippy::unused_self)]
-#![allow(clippy::format_push_string)]
-#![allow(clippy::assigning_clones)]
 #![allow(clippy::case_sensitive_file_extension_comparisons)]
-#![allow(clippy::should_implement_trait)]
 #![allow(clippy::default_trait_access)]
 #![allow(clippy::field_reassign_with_default)]
-#![allow(clippy::unreadable_literal)]
+#![allow(clippy::unreadable_literal)] // Magic numbers in binary formats are clearer as hex
 #![allow(clippy::implicit_hasher)]
 #![allow(clippy::manual_clamp)]
-#![allow(clippy::duplicated_attributes)]
-#![allow(clippy::len_without_is_empty)]
+#![allow(clippy::len_without_is_empty)] // Many index types don't need is_empty()
 #![allow(clippy::large_enum_variant)]
 #![allow(clippy::ptr_arg)]
 #![allow(clippy::map_unwrap_or)]
 #![allow(clippy::incompatible_msrv)]
+#![allow(clippy::should_implement_trait)] // Some method names are clearer than trait names
+#![allow(clippy::duplicated_attributes)]
+//
+// Return value wrapping: Many functions use Result for consistency even when they
+// currently can't fail, allowing future error conditions to be added without breaking API.
+#![allow(clippy::unnecessary_wraps)]
+#![allow(clippy::unused_self)] // Some trait impls or future extensibility
 
 /// The memvid-core crate version (matches `Cargo.toml`).
 pub const MEMVID_CORE_VERSION: &str = env!("CARGO_PKG_VERSION");

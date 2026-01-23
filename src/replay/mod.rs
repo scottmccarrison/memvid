@@ -116,6 +116,7 @@ impl ActiveSession {
     }
 
     /// End the session and return it
+    #[must_use] 
     pub fn end(mut self) -> ReplaySession {
         self.session.end();
         self.session
@@ -130,7 +131,7 @@ impl ActiveSession {
 
 /// Storage operations for replay segments
 pub mod storage {
-    use super::*;
+    use super::{REPLAY_SEGMENT_MAGIC, REPLAY_SEGMENT_VERSION, Result, MemvidError, ReplaySession};
     use bincode::config::{self, Config};
     use std::io::{Read, Write};
 
@@ -208,7 +209,7 @@ pub mod storage {
     pub fn serialize_session(session: &ReplaySession) -> Result<Vec<u8>> {
         bincode::serde::encode_to_vec(session, bincode_config()).map_err(|e| {
             MemvidError::InvalidToc {
-                reason: format!("Failed to serialize replay session: {}", e).into(),
+                reason: format!("Failed to serialize replay session: {e}").into(),
             }
         })
     }
@@ -218,7 +219,7 @@ pub mod storage {
         bincode::serde::decode_from_slice(data, bincode_config())
             .map(|(session, _)| session)
             .map_err(|e| MemvidError::InvalidToc {
-                reason: format!("Failed to deserialize replay session: {}", e).into(),
+                reason: format!("Failed to deserialize replay session: {e}").into(),
             })
     }
 
@@ -281,7 +282,7 @@ pub mod storage {
         let session_bytes =
             bincode::serde::encode_to_vec(session, bincode_config()).map_err(|e| {
                 MemvidError::InvalidToc {
-                    reason: format!("Failed to serialize active session: {}", e).into(),
+                    reason: format!("Failed to serialize active session: {e}").into(),
                 }
             })?;
         data.extend_from_slice(&(session_bytes.len() as u64).to_le_bytes());
@@ -310,7 +311,7 @@ pub mod storage {
         bincode::serde::decode_from_slice(&data[16..16 + len], bincode_config())
             .map(|(session, _)| session)
             .map_err(|e| MemvidError::InvalidToc {
-                reason: format!("Failed to deserialize active session: {}", e).into(),
+                reason: format!("Failed to deserialize active session: {e}").into(),
             })
     }
 }

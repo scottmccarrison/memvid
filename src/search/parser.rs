@@ -412,7 +412,7 @@ impl TextTerm {
         // (i.e., "mach?ne" or "mach*" are wildcards, but "machine?" is just "machine")
         if cleaned.contains('*') || cleaned.contains('?') {
             TextTerm::Wildcard(WildcardPattern::new(cleaned.to_string()))
-        } else if cleaned.is_empty() || !cleaned.chars().any(|c| c.is_alphanumeric()) {
+        } else if cleaned.is_empty() || !cleaned.chars().any(char::is_alphanumeric) {
             // If the word has no alphanumeric chars, treat as empty
             // (e.g., "-", "---", ":", etc. won't produce tokens anyway)
             TextTerm::Word(String::new())
@@ -516,7 +516,7 @@ impl WildcardPattern {
             .next()
             .map(|segment| segment.split('?').next().unwrap_or(""))
             .filter(|seed| !seed.is_empty())
-            .map(|seed| seed.to_string())
+            .map(std::string::ToString::to_string)
     }
 }
 

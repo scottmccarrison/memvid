@@ -67,8 +67,7 @@ impl EmbeddedWal {
             .sum();
         let sequence = entries
             .last()
-            .map(|entry| entry.sequence)
-            .unwrap_or(checkpoint_sequence);
+            .map_or(checkpoint_sequence, |entry| entry.sequence);
 
         let mut wal = Self {
             file: clone,
@@ -153,6 +152,7 @@ impl EmbeddedWal {
         Ok(self.sequence)
     }
 
+    #[must_use]
     pub fn should_checkpoint(&self) -> bool {
         if self.read_only || self.region_size == 0 {
             return false;
@@ -181,10 +181,7 @@ impl EmbeddedWal {
         let (entries, next_head) =
             Self::scan_records(&mut self.file, self.region_offset, self.region_size)?;
 
-        self.sequence = entries
-            .last()
-            .map(|entry| entry.sequence)
-            .unwrap_or(self.sequence);
+        self.sequence = entries.last().map_or(self.sequence, |entry| entry.sequence);
         self.pending_bytes = entries
             .iter()
             .filter(|entry| entry.sequence > self.checkpoint_sequence)
@@ -205,6 +202,7 @@ impl EmbeddedWal {
             .collect())
     }
 
+    #[must_use]
     pub fn stats(&self) -> WalStats {
         WalStats {
             region_size: self.region_size,
@@ -214,10 +212,12 @@ impl EmbeddedWal {
         }
     }
 
+    #[must_use]
     pub fn region_offset(&self) -> u64 {
         self.region_offset
     }
 
+    #[must_use]
     pub fn file(&self) -> &File {
         &self.file
     }
@@ -263,6 +263,7 @@ impl EmbeddedWal {
         let remaining = self.region_size - pos;
         if remaining < ENTRY_HEADER_SIZE as u64 {
             if remaining > 0 {
+                // Safe: remaining < ENTRY_HEADER_SIZE (48) so always fits in usize
                 let zero_tail = vec![0u8; remaining as usize];
                 self.seek_and_write(pos, &zero_tail)?;
             }
@@ -309,12 +310,12 @@ impl EmbeddedWal {
                     reason: "invalid wal sequence header".into(),
                 }
             })?);
-            let length = u32::from_le_bytes(header[8..12].try_into().map_err(|_| {
-                MemvidError::WalCorruption {
+            let length = u64::from(u32::from_le_bytes(header[8..12].try_into().map_err(
+                |_| MemvidError::WalCorruption {
                     offset: cursor,
                     reason: "invalid wal length header".into(),
-                }
-            })?) as u64;
+                },
+            )?));
             let checksum = &header[16..48];
 
             if sequence == 0 && length == 0 {
@@ -334,7 +335,13 @@ impl EmbeddedWal {
                 });
             }
 
-            let mut payload = vec![0u8; length as usize];
+            // Safe: length comes from u32::from_le_bytes above, so max is u32::MAX
+            // which fits in usize on all supported platforms (32-bit and 64-bit)
+            let length_usize = usize::try_from(length).map_err(|_| MemvidError::WalCorruption {
+                offset: cursor,
+                reason: "wal record length too large for platform".into(),
+            })?;
+            let mut payload = vec![0u8; length_usize];
             file.read_exact(&mut payload)?;
             let expected = blake3::hash(&payload);
             if expected.as_bytes() != checksum {
@@ -384,13 +391,11 @@ impl EmbeddedWal {
         let seq = buf
             .get(..8)
             .and_then(|s| <[u8; 8]>::try_from(s).ok())
-            .map(u64::from_le_bytes)
-            .unwrap_or(0);
+            .map_or(0, u64::from_le_bytes);
         let len = buf
             .get(8..12)
             .and_then(|s| <[u8; 4]>::try_from(s).ok())
-            .map(u32::from_le_bytes)
-            .unwrap_or(0);
+            .map_or(0, u32::from_le_bytes);
 
         tracing::debug!(
             wal.verify_position = pos,

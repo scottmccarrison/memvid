@@ -497,13 +497,13 @@ impl MemoriesTrack {
         buf.extend_from_slice(&MEMORIES_TRACK_VERSION.to_le_bytes());
 
         let json_data = serde_json::to_vec(self).map_err(|e| MemvidError::InvalidHeader {
-            reason: format!("failed to serialize memories track: {}", e).into(),
+            reason: format!("failed to serialize memories track: {e}").into(),
         })?;
 
         // Compress the JSON data
         let compressed =
             zstd::encode_all(json_data.as_slice(), 3).map_err(|e| MemvidError::InvalidHeader {
-                reason: format!("failed to compress memories track: {}", e).into(),
+                reason: format!("failed to compress memories track: {e}").into(),
             })?;
 
         buf.extend_from_slice(&(compressed.len() as u64).to_le_bytes());
@@ -529,12 +529,14 @@ impl MemoriesTrack {
         let version = u16::from_le_bytes([data[4], data[5]]);
         if version != MEMORIES_TRACK_VERSION {
             return Err(MemvidError::InvalidHeader {
-                reason: format!("unsupported memories version: {}", version).into(),
+                reason: format!("unsupported memories version: {version}").into(),
             });
         }
 
         let len = u64::from_le_bytes([
-            data[6], data[7], data[8], data[9], data[10], data[11], data[12], data[13],
+            data[6], data[7], data[8], data[9], data[10], data[11], data[12],
+            data[13],
+            // Safe: checked on next line that data.len() >= 14 + len, so len fits in available memory
         ]) as usize;
         if data.len() < 14 + len {
             return Err(MemvidError::InvalidHeader {
@@ -545,12 +547,12 @@ impl MemoriesTrack {
         // Decompress the data
         let decompressed =
             zstd::decode_all(&data[14..14 + len]).map_err(|e| MemvidError::InvalidHeader {
-                reason: format!("failed to decompress memories track: {}", e).into(),
+                reason: format!("failed to decompress memories track: {e}").into(),
             })?;
 
         let track: MemoriesTrack =
             serde_json::from_slice(&decompressed).map_err(|e| MemvidError::InvalidHeader {
-                reason: format!("failed to deserialize memories track: {}", e).into(),
+                reason: format!("failed to deserialize memories track: {e}").into(),
             })?;
 
         Ok(track)

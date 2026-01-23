@@ -206,6 +206,7 @@ pub struct CommitOptions {
 }
 
 impl CommitOptions {
+    #[must_use]
     pub fn new(mode: CommitMode) -> Self {
         Self {
             mode,
@@ -213,6 +214,7 @@ impl CommitOptions {
         }
     }
 
+    #[must_use]
     pub fn background(mut self, background: bool) -> Self {
         self.background = background;
         self
@@ -351,7 +353,7 @@ fn extract_via_registry(
     } else {
         tracing::debug!(
             target = "memvid::extract",
-            format = hint.format.map(|f| f.label()),
+            format = hint.format.map(super::super::reader::DocumentFormat::label),
             "no reader matched; using default extractor"
         );
         Some("no registered reader matched; using default extractor".to_string())
@@ -379,7 +381,7 @@ fn finalize_reader_output(output: ReaderOutput, start: Instant) -> ExtractedDocu
 fn log_reader_result(reader: &str, diagnostics: &ReaderDiagnostics, elapsed: Duration) {
     let duration_ms = diagnostics
         .duration_ms
-        .unwrap_or_else(|| elapsed.as_millis() as u64);
+        .unwrap_or(elapsed.as_millis() as u64);
     let warnings = diagnostics.warnings.len();
     let pages = diagnostics.pages_processed;
 
@@ -393,7 +395,7 @@ fn log_reader_result(reader: &str, diagnostics: &ReaderDiagnostics, elapsed: Dur
             fallback = diagnostics.fallback,
             "extraction completed with warnings"
         );
-        for warning in diagnostics.warnings.iter() {
+        for warning in &diagnostics.warnings {
             tracing::warn!(target = "memvid::extract", reader, warning = %warning);
         }
     } else {
@@ -464,7 +466,7 @@ impl Memvid {
                         {
                             self.tantivy_dirty = original_tantivy_dirty;
                         }
-                        Err(commit_err.into())
+                        Err(commit_err)
                     }
                 }
             }
@@ -789,10 +791,7 @@ impl Memvid {
         let mut indexes_rebuilt = false;
 
         // Check if CLIP index has pending embeddings that need to be persisted
-        let clip_needs_persist = self
-            .clip_index
-            .as_ref()
-            .map_or(false, |idx| !idx.is_empty());
+        let clip_needs_persist = self.clip_index.as_ref().is_some_and(|idx| !idx.is_empty());
 
         if !delta.is_empty() || clip_needs_persist {
             tracing::debug!(
@@ -1150,16 +1149,15 @@ impl Memvid {
                             let payload_length = entry.payload.len() as u64;
                             let canonical_length =
                                 if entry.canonical_encoding == CanonicalEncoding::Zstd {
-                                    match entry.canonical_length {
-                                        Some(len) => len,
-                                        None => {
-                                            let decoded = crate::decode_canonical_bytes(
-                                                &entry.payload,
-                                                CanonicalEncoding::Zstd,
-                                                frame_id,
-                                            )?;
-                                            decoded.len() as u64
-                                        }
+                                    if let Some(len) = entry.canonical_length {
+                                        len
+                                    } else {
+                                        let decoded = crate::decode_canonical_bytes(
+                                            &entry.payload,
+                                            CanonicalEncoding::Zstd,
+                                            frame_id,
+                                        )?;
+                                        decoded.len() as u64
                                     }
                                 } else {
                                     entry.canonical_length.unwrap_or(entry.payload.len() as u64)
@@ -1294,7 +1292,7 @@ impl Memvid {
                             None
                         };
                         #[cfg(feature = "lex")]
-                        if let (Some(engine), Some(ref text)) =
+                        if let (Some(engine), Some(text)) =
                             (self.tantivy.as_mut(), index_text.as_ref())
                         {
                             engine.add_frame(&frame, text)?;
@@ -2080,7 +2078,9 @@ impl Memvid {
         }
 
         // Persist logic mesh if it has nodes
-        if !self.logic_mesh.is_empty() {
+        if self.logic_mesh.is_empty() {
+            self.toc.logic_mesh = None;
+        } else {
             let mesh_offset = footer_offset;
             let mesh_bytes = self.logic_mesh.serialize()?;
             let mesh_checksum: [u8; 32] = blake3::hash(&mesh_bytes).into();
@@ -2096,8 +2096,6 @@ impl Memvid {
                 edge_count: stats.edge_count as u64,
                 checksum: mesh_checksum,
             });
-        } else {
-            self.toc.logic_mesh = None;
         }
 
         // This fires on every full rebuild (doctor/compaction); keep it informational to avoid noisy WARNs.
@@ -2147,19 +2145,15 @@ impl Memvid {
                 if doc_count == 0 && text_indexable_count > 0 {
                     return Err(MemvidError::Doctor {
                         reason: format!(
-                            "Lex index rebuild failed: 0 documents indexed from {} text-indexable frames. \
-                            This indicates a critical failure in the rebuild process.",
-                            text_indexable_count
+                            "Lex index rebuild failed: 0 documents indexed from {text_indexable_count} text-indexable frames. \
+                            This indicates a critical failure in the rebuild process."
                         ),
                     });
                 }
 
                 // Success! Log it
                 log::info!(
-                    "✓ Doctor lex index rebuild succeeded: {} docs from {} frames ({} text-indexable)",
-                    doc_count,
-                    active_frame_count,
-                    text_indexable_count
+                    "✓ Doctor lex index rebuild succeeded: {doc_count} docs from {active_frame_count} frames ({text_indexable_count} text-indexable)"
                 );
             }
         }
@@ -2348,25 +2342,24 @@ impl Memvid {
             segments,
         } = batch;
 
-        if let Some(mut storage) = self.lex_storage.write().ok() {
+        if let Ok(mut storage) = self.lex_storage.write() {
             storage.replace(doc_count, checksum, segments);
             storage.set_generation(generation);
         }
 
-        let result = self.persist_lex_manifest();
-        result
+        self.persist_lex_manifest()
     }
 
     #[cfg(feature = "lex")]
     fn append_lex_batch(&mut self, batch: &LexWalBatch) -> Result<()> {
-        let payload = encode_to_vec(&WalEntry::Lex(batch.clone()), wal_config())?;
+        let payload = encode_to_vec(WalEntry::Lex(batch.clone()), wal_config())?;
         self.append_wal_entry(&payload)?;
         Ok(())
     }
 
     #[cfg(feature = "lex")]
     fn persist_lex_manifest(&mut self) -> Result<()> {
-        let (index_manifest, segments) = if let Some(storage) = self.lex_storage.read().ok() {
+        let (index_manifest, segments) = if let Ok(storage) = self.lex_storage.read() {
             storage.to_manifest()
         } else {
             (None, Vec::new())
@@ -2510,7 +2503,7 @@ impl Memvid {
         self.toc
             .frames
             .get(frame_id as usize)
-            .map_or(false, |frame| frame.status == FrameStatus::Active)
+            .is_some_and(|frame| frame.status == FrameStatus::Active)
     }
 
     #[cfg(feature = "parallel_segments")]
@@ -2622,6 +2615,7 @@ impl Memvid {
     ///
     /// Returns the capacity from the applied ticket, or the default
     /// tier capacity (1 GB for free tier).
+    #[must_use]
     pub fn get_capacity(&self) -> u64 {
         self.capacity_limit()
     }
@@ -2845,6 +2839,7 @@ impl Memvid {
     ///     mem.put_with_embedding_and_options(payload, embedding, options)?;
     /// }
     /// ```
+    #[must_use]
     pub fn preview_chunks(&self, payload: &[u8]) -> Option<Vec<String>> {
         plan_document_chunks(payload).map(|plan| plan.chunks)
     }
@@ -2985,8 +2980,7 @@ impl Memvid {
             Some(frame_id),
         )?;
         info!(
-            "frame_update frame_id={} seq={} reused_payload={} replaced_payload={}",
-            frame_id, seq, reuse_flag, replace_flag
+            "frame_update frame_id={frame_id} seq={seq} reused_payload={reuse_flag} replaced_payload={replace_flag}"
         );
         Ok(seq)
     }
@@ -3036,13 +3030,13 @@ impl Memvid {
         tombstone.kind = frame.kind.clone();
         tombstone.track = frame.track.clone();
 
-        let payload_bytes = encode_to_vec(&WalEntry::Frame(tombstone), wal_config())?;
+        let payload_bytes = encode_to_vec(WalEntry::Frame(tombstone), wal_config())?;
         let seq = self.append_wal_entry(&payload_bytes)?;
         self.dirty = true;
         if self.wal.should_checkpoint() {
             self.commit()?;
         }
-        info!("frame_delete frame_id={} seq={}", frame_id, seq);
+        info!("frame_delete frame_id={frame_id} seq={seq}");
         Ok(seq)
     }
 }
@@ -3174,13 +3168,13 @@ impl Memvid {
                 .unwrap_or(0)
         });
 
-        let mut _reuse_bytes: Option<Vec<u8>> = None;
+        let mut reuse_bytes: Option<Vec<u8>> = None;
         let payload_for_processing = if let Some(bytes) = payload {
             Some(bytes)
         } else if let Some(frame) = reuse_frame.as_ref() {
             let bytes = self.frame_canonical_bytes(frame)?;
-            _reuse_bytes = Some(bytes);
-            _reuse_bytes.as_deref()
+            reuse_bytes = Some(bytes);
+            reuse_bytes.as_deref()
         } else {
             None
         };
@@ -3249,7 +3243,7 @@ impl Memvid {
 
         let need_search_text = search_text
             .as_ref()
-            .map_or(true, |text| text.trim().is_empty());
+            .is_none_or(|text| text.trim().is_empty());
         let need_metadata = metadata.is_none();
         let run_extractor = need_search_text || need_metadata || options.auto_tag;
 
@@ -3295,7 +3289,7 @@ impl Memvid {
                                     "sections_extracted": result.sections_extracted,
                                     "sections_total": result.sections_total,
                                 }),
-                                mime_type: mime_hint.map(|s| s.to_string()),
+                                mime_type: mime_hint.map(std::string::ToString::to_string),
                             };
                             Some(doc)
                         }
@@ -3355,17 +3349,14 @@ impl Memvid {
             }
 
             if let Some(mime) = doc.mime_type.as_ref() {
-                match &mut metadata {
-                    Some(existing) => {
-                        if existing.mime.is_none() {
-                            existing.mime = Some(mime.clone());
-                        }
+                if let Some(existing) = &mut metadata {
+                    if existing.mime.is_none() {
+                        existing.mime = Some(mime.clone());
                     }
-                    None => {
-                        let mut doc_meta = DocMetadata::default();
-                        doc_meta.mime = Some(mime.clone());
-                        metadata = Some(doc_meta);
-                    }
+                } else {
+                    let mut doc_meta = DocMetadata::default();
+                    doc_meta.mime = Some(mime.clone());
+                    metadata = Some(doc_meta);
                 }
             }
 
@@ -3379,7 +3370,7 @@ impl Memvid {
         if options.auto_tag {
             if let Some(ref text) = search_text {
                 if !text.trim().is_empty() {
-                    let result = AutoTagger::default().analyse(text, options.extract_dates);
+                    let result = AutoTagger.analyse(text, options.extract_dates);
                     merge_unique(&mut tags, result.tags);
                     merge_unique(&mut labels, result.labels);
                     if options.extract_dates && content_dates.is_empty() {
@@ -3571,69 +3562,67 @@ impl Memvid {
             enrichment_state,
         };
 
-        let parent_bytes = encode_to_vec(&WalEntry::Frame(entry), wal_config())?;
+        let parent_bytes = encode_to_vec(WalEntry::Frame(entry), wal_config())?;
         let parent_seq = self.append_wal_entry(&parent_bytes)?;
         self.pending_frame_inserts = self.pending_frame_inserts.saturating_add(1);
 
         // Instant indexing: make frame searchable immediately (<1s) without full commit
         // This is Phase 1 of progressive ingestion - frame is searchable but not fully enriched
         #[cfg(feature = "lex")]
-        if options.instant_index {
-            if self.tantivy.is_some() {
-                // Create a minimal frame for indexing
-                let frame_id = parent_seq as FrameId;
+        if options.instant_index && self.tantivy.is_some() {
+            // Create a minimal frame for indexing
+            let frame_id = parent_seq as FrameId;
 
-                // Use triplet_text which was cloned before entry was created
-                if let Some(ref text) = triplet_text {
-                    if !text.trim().is_empty() {
-                        // Create temporary frame for indexing (minimal fields for Tantivy)
-                        let temp_frame = Frame {
-                            id: frame_id,
-                            timestamp,
-                            anchor_ts: None,
-                            anchor_source: None,
-                            kind: options.kind.clone(),
-                            track: options.track.clone(),
-                            payload_offset: 0,
-                            payload_length: 0,
-                            checksum: [0u8; 32],
-                            uri: options
-                                .uri
-                                .clone()
-                                .or_else(|| Some(crate::default_uri(frame_id))),
-                            title: options.title.clone(),
-                            canonical_encoding: crate::types::CanonicalEncoding::default(),
-                            canonical_length: None,
-                            metadata: None, // Not needed for text search
-                            search_text: triplet_text.clone(),
-                            tags: instant_index_tags.clone(),
-                            labels: instant_index_labels.clone(),
-                            extra_metadata: std::collections::BTreeMap::new(), // Not needed for search
-                            content_dates: Vec::new(), // Not needed for search
-                            chunk_manifest: None,
-                            role: options.role,
-                            parent_id: None,
-                            chunk_index: None,
-                            chunk_count: None,
-                            status: FrameStatus::Active,
-                            supersedes: supersedes,
-                            superseded_by: None,
-                            source_sha256: None, // Not needed for search
-                            source_path: None,   // Not needed for search
-                            enrichment_state: crate::types::EnrichmentState::Searchable,
-                        };
+            // Use triplet_text which was cloned before entry was created
+            if let Some(ref text) = triplet_text {
+                if !text.trim().is_empty() {
+                    // Create temporary frame for indexing (minimal fields for Tantivy)
+                    let temp_frame = Frame {
+                        id: frame_id,
+                        timestamp,
+                        anchor_ts: None,
+                        anchor_source: None,
+                        kind: options.kind.clone(),
+                        track: options.track.clone(),
+                        payload_offset: 0,
+                        payload_length: 0,
+                        checksum: [0u8; 32],
+                        uri: options
+                            .uri
+                            .clone()
+                            .or_else(|| Some(crate::default_uri(frame_id))),
+                        title: options.title.clone(),
+                        canonical_encoding: crate::types::CanonicalEncoding::default(),
+                        canonical_length: None,
+                        metadata: None, // Not needed for text search
+                        search_text: triplet_text.clone(),
+                        tags: instant_index_tags.clone(),
+                        labels: instant_index_labels.clone(),
+                        extra_metadata: std::collections::BTreeMap::new(), // Not needed for search
+                        content_dates: Vec::new(),                         // Not needed for search
+                        chunk_manifest: None,
+                        role: options.role,
+                        parent_id: None,
+                        chunk_index: None,
+                        chunk_count: None,
+                        status: FrameStatus::Active,
+                        supersedes,
+                        superseded_by: None,
+                        source_sha256: None, // Not needed for search
+                        source_path: None,   // Not needed for search
+                        enrichment_state: crate::types::EnrichmentState::Searchable,
+                    };
 
-                        // Get mutable reference to engine and index the frame
-                        if let Some(engine) = self.tantivy.as_mut() {
-                            engine.add_frame(&temp_frame, text)?;
-                            engine.soft_commit()?;
-                            self.tantivy_dirty = true;
+                    // Get mutable reference to engine and index the frame
+                    if let Some(engine) = self.tantivy.as_mut() {
+                        engine.add_frame(&temp_frame, text)?;
+                        engine.soft_commit()?;
+                        self.tantivy_dirty = true;
 
-                            tracing::debug!(
-                                frame_id = frame_id,
-                                "instant index: frame searchable immediately"
-                            );
-                        }
+                        tracing::debug!(
+                            frame_id = frame_id,
+                            "instant index: frame searchable immediately"
+                        );
                     }
                 }
             }
@@ -3656,7 +3645,7 @@ impl Memvid {
 
         for mut chunk_entry in chunk_entries {
             chunk_entry.parent_sequence = Some(parent_seq);
-            let chunk_bytes = encode_to_vec(&WalEntry::Frame(chunk_entry), wal_config())?;
+            let chunk_bytes = encode_to_vec(WalEntry::Frame(chunk_entry), wal_config())?;
             self.append_wal_entry(&chunk_bytes)?;
             self.pending_frame_inserts = self.pending_frame_inserts.saturating_add(1);
         }
@@ -3856,7 +3845,7 @@ pub(crate) fn augment_search_text(
             if value.trim().is_empty() {
                 continue;
             }
-            segments.push(format!("{}: {}", key, value));
+            segments.push(format!("{key}: {value}"));
         }
     }
 
@@ -3866,7 +3855,7 @@ pub(crate) fn augment_search_text(
 
     if let Some(meta) = metadata {
         if let Ok(meta_json) = serde_json::to_string(meta) {
-            segments.push(format!("metadata: {}", meta_json));
+            segments.push(format!("metadata: {meta_json}"));
         }
     }
 

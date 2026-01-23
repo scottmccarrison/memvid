@@ -271,7 +271,7 @@ fn assign_text_to_cells(
         .collect()
 }
 
-/// Build an ExtractedTable from grid data.
+/// Build an `ExtractedTable` from grid data.
 fn build_table_from_grid(
     grid: &[GridCell],
     cell_contents: &HashMap<(usize, usize), String>,
@@ -309,7 +309,7 @@ fn build_table_from_grid(
         headers = first_row
             .cell_texts()
             .iter()
-            .map(|s| s.to_string())
+            .map(|s| (*s).to_string())
             .collect();
         if headers.iter().any(|h| !h.is_empty()) {
             if let Some(row) = rows.first_mut() {
@@ -379,7 +379,7 @@ fn extract_stream_tables(
 }
 
 /// Cluster text boxes into rows by Y-position.
-fn cluster_into_rows<'a>(text_boxes: &'a [TextBox], threshold: f32) -> Vec<Vec<&'a TextBox>> {
+fn cluster_into_rows(text_boxes: &[TextBox], threshold: f32) -> Vec<Vec<&TextBox>> {
     if text_boxes.is_empty() {
         return Vec::new();
     }
@@ -457,7 +457,7 @@ fn filter_consistent_boundaries(
         .collect()
 }
 
-/// Build an ExtractedTable from stream-detected structure.
+/// Build an `ExtractedTable` from stream-detected structure.
 fn build_stream_table(
     text_rows: &[Vec<&TextBox>],
     col_boundaries: &[f32],
@@ -501,7 +501,7 @@ fn build_stream_table(
         headers = first_row
             .cell_texts()
             .iter()
-            .map(|s| s.to_string())
+            .map(|s| (*s).to_string())
             .collect();
         // Check if first row looks like headers (non-empty, possibly different formatting)
         let non_empty_count = headers.iter().filter(|h| !h.is_empty()).count();
@@ -929,7 +929,7 @@ fn infer_column_count(lines: &[String], currency_re: &Regex, _date_re: &Regex) -
     max_parts.max(2) // Assume at least 2 columns for table detection
 }
 
-/// Build an ExtractedTable from a line-based region.
+/// Build an `ExtractedTable` from a line-based region.
 fn build_line_based_table(
     region: LineBasedTableRegion,
     source_file: &str,

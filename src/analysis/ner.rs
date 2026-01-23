@@ -12,7 +12,7 @@
 //!
 //! # Simple Interface
 //!
-//! Unlike GLiNER, DistilBERT-NER uses standard BERT tokenization:
+//! Unlike `GLiNER`, DistilBERT-NER uses standard BERT tokenization:
 //! - Input: `input_ids`, `attention_mask`
 //! - Output: per-token logits for B-PER, I-PER, B-ORG, I-ORG, B-LOC, I-LOC, B-MISC, I-MISC, O
 
@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 /// Model name for downloads and caching
 pub const NER_MODEL_NAME: &str = "distilbert-ner";
 
-/// Model download URL (HuggingFace)
+/// Model download URL (`HuggingFace`)
 pub const NER_MODEL_URL: &str =
     "https://huggingface.co/dslim/distilbert-NER/resolve/main/onnx/model.onnx";
 
@@ -84,11 +84,13 @@ pub static NER_MODELS: &[NerModelInfo] = &[NerModelInfo {
 }];
 
 /// Get NER model info by name
+#[must_use] 
 pub fn get_ner_model_info(name: &str) -> Option<&'static NerModelInfo> {
     NER_MODELS.iter().find(|m| m.name == name)
 }
 
 /// Get default NER model info
+#[must_use] 
 pub fn default_ner_model_info() -> &'static NerModelInfo {
     NER_MODELS
         .iter()
@@ -116,7 +118,8 @@ pub struct ExtractedEntity {
 }
 
 impl ExtractedEntity {
-    /// Convert the raw entity type to our EntityKind enum
+    /// Convert the raw entity type to our `EntityKind` enum
+    #[must_use] 
     pub fn to_entity_kind(&self) -> EntityKind {
         match self.entity_type.to_uppercase().as_str() {
             "PER" | "PERSON" | "B-PER" | "I-PER" => EntityKind::Person,
@@ -559,16 +562,19 @@ impl NerModel {
 // ============================================================================
 
 /// Get the expected path for the NER model in the models directory
+#[must_use] 
 pub fn ner_model_path(models_dir: &Path) -> PathBuf {
     models_dir.join(NER_MODEL_NAME).join("model.onnx")
 }
 
 /// Get the expected path for the NER tokenizer in the models directory
+#[must_use] 
 pub fn ner_tokenizer_path(models_dir: &Path) -> PathBuf {
     models_dir.join(NER_MODEL_NAME).join("tokenizer.json")
 }
 
 /// Check if NER model is installed
+#[must_use] 
 pub fn is_ner_model_installed(models_dir: &Path) -> bool {
     ner_model_path(models_dir).exists() && ner_tokenizer_path(models_dir).exists()
 }

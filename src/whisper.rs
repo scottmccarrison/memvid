@@ -6,7 +6,7 @@
 //! - Audio decoding (MP3, WAV, FLAC, etc.) via symphonia
 //! - Resampling to 16kHz via rubato
 //! - Whisper model inference via candle-transformers
-//! - Automatic model download from HuggingFace Hub
+//! - Automatic model download from `HuggingFace` Hub
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -40,10 +40,10 @@ impl Default for QuantizationType {
     }
 }
 
-/// Available Whisper models with verified HuggingFace model IDs
+/// Available Whisper models with verified `HuggingFace` model IDs
 #[derive(Debug, Clone)]
 pub struct WhisperModelInfo {
-    /// Model identifier for HuggingFace
+    /// Model identifier for `HuggingFace`
     pub model_id: &'static str,
     /// Human-readable name
     pub name: &'static str,
@@ -113,6 +113,7 @@ pub static WHISPER_MODELS: &[WhisperModelInfo] = &[
 ];
 
 /// Get model info by name, defaults to whisper-small-en
+#[must_use]
 pub fn get_whisper_model_info(name: &str) -> &'static WhisperModelInfo {
     WHISPER_MODELS
         .iter()
@@ -126,6 +127,7 @@ pub fn get_whisper_model_info(name: &str) -> &'static WhisperModelInfo {
 }
 
 /// Get the default model info
+#[must_use]
 pub fn default_whisper_model_info() -> &'static WhisperModelInfo {
     WHISPER_MODELS
         .iter()

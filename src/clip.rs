@@ -46,7 +46,7 @@ pub const SIGLIP_DIMS: u32 = 768;
 /// Default input resolution for MobileCLIP-S2
 pub const MOBILECLIP_INPUT_SIZE: u32 = 256;
 
-/// Default input resolution for SigLIP
+/// Default input resolution for `SigLIP`
 pub const SIGLIP_INPUT_SIZE: u32 = 224;
 
 /// Minimum image dimension to process (skip icons, bullets)
@@ -75,7 +75,7 @@ fn clip_config() -> impl bincode::config::Config {
 // Model Registry
 // ============================================================================
 
-/// Available CLIP models with verified HuggingFace URLs
+/// Available CLIP models with verified `HuggingFace` URLs
 #[derive(Debug, Clone)]
 pub struct ClipModelInfo {
     /// Model identifier
@@ -140,6 +140,7 @@ pub static CLIP_MODELS: &[ClipModelInfo] = &[
 ];
 
 /// Get model info by name, defaults to mobileclip-s2
+#[must_use] 
 pub fn get_model_info(name: &str) -> &'static ClipModelInfo {
     CLIP_MODELS
         .iter()
@@ -153,6 +154,7 @@ pub fn get_model_info(name: &str) -> &'static ClipModelInfo {
 }
 
 /// Get the default model info
+#[must_use] 
 pub fn default_model_info() -> &'static ClipModelInfo {
     CLIP_MODELS
         .iter()
@@ -183,6 +185,7 @@ pub struct ClipIndexBuilder {
 }
 
 impl ClipIndexBuilder {
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
@@ -207,8 +210,7 @@ impl ClipIndexBuilder {
         let dimension = self
             .documents
             .first()
-            .map(|doc| doc.embedding.len() as u32)
-            .unwrap_or(0);
+            .map_or(0, |doc| doc.embedding.len() as u32);
 
         Ok(ClipIndexArtifact {
             bytes,
@@ -226,7 +228,7 @@ pub struct ClipIndexArtifact {
     pub bytes: Vec<u8>,
     /// Number of vectors in the index
     pub vector_count: u64,
-    /// Embedding dimension (512 for MobileCLIP, 768 for SigLIP)
+    /// Embedding dimension (512 for `MobileCLIP`, 768 for `SigLIP`)
     pub dimension: u32,
     /// Blake3 checksum of the bytes
     pub checksum: [u8; 32],
@@ -238,8 +240,15 @@ pub struct ClipIndex {
     documents: Vec<ClipDocument>,
 }
 
+impl Default for ClipIndex {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ClipIndex {
     /// Create a new empty CLIP index
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             documents: Vec::new(),
@@ -288,6 +297,7 @@ impl ClipIndex {
     }
 
     /// Search for similar embeddings using L2 distance
+    #[must_use] 
     pub fn search(&self, query: &[f32], limit: usize) -> Vec<ClipSearchHit> {
         if query.is_empty() {
             return Vec::new();
@@ -323,6 +333,7 @@ impl ClipIndex {
     }
 
     /// Get embedding for a specific frame
+    #[must_use] 
     pub fn embedding_for(&self, frame_id: FrameId) -> Option<&[f32]> {
         self.documents
             .iter()
@@ -336,11 +347,13 @@ impl ClipIndex {
     }
 
     /// Number of documents in the index
+    #[must_use] 
     pub fn len(&self) -> usize {
         self.documents.len()
     }
 
     /// Check if index is empty
+    #[must_use] 
     pub fn is_empty(&self) -> bool {
         self.documents.is_empty()
     }
@@ -353,8 +366,7 @@ impl ClipIndex {
         let dimension = self
             .documents
             .first()
-            .map(|doc| doc.embedding.len() as u32)
-            .unwrap_or(0);
+            .map_or(0, |doc| doc.embedding.len() as u32);
 
         Ok(ClipIndexArtifact {
             bytes,
@@ -399,6 +411,7 @@ pub struct ImageInfo {
 
 impl ImageInfo {
     /// Check if this image should be processed for CLIP embedding
+    #[must_use] 
     pub fn should_embed(&self) -> bool {
         // Skip tiny images (icons, bullets)
         if self.width < MIN_IMAGE_DIM || self.height < MIN_IMAGE_DIM {
@@ -407,7 +420,7 @@ impl ImageInfo {
 
         // Skip extreme aspect ratios (dividers, lines)
         let aspect = self.width as f32 / self.height as f32;
-        if aspect > MAX_ASPECT_RATIO || aspect < (1.0 / MAX_ASPECT_RATIO) {
+        if !((1.0 / MAX_ASPECT_RATIO)..=MAX_ASPECT_RATIO).contains(&aspect) {
             return false;
         }
 

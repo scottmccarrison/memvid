@@ -40,7 +40,7 @@ pub const TABLE_ROW_KIND: &str = "table_row";
 /// * `embed_rows` - Whether to generate embeddings for row frames
 ///
 /// # Returns
-/// A tuple of (meta_frame_id, row_frame_ids)
+/// A tuple of (`meta_frame_id`, `row_frame_ids`)
 pub fn store_table(
     mem: &mut Memvid,
     table: &ExtractedTable,
@@ -114,7 +114,7 @@ fn store_table_impl(
         timestamp: None,
         track: Some(TABLE_TRACK.to_string()),
         kind: Some(TABLE_META_KIND.to_string()),
-        uri: Some(format!("mv2://tables/{}", table_id)),
+        uri: Some(format!("mv2://tables/{table_id}")),
         title: Some(format!(
             "Table from {} (pages {}-{})",
             table.source_file, table.page_start, table.page_end
@@ -341,7 +341,7 @@ pub fn list_tables(mem: &mut Memvid) -> Result<Vec<TableSummary>> {
 /// * `table_id` - The table ID to look up
 ///
 /// # Returns
-/// The reconstructed ExtractedTable if found
+/// The reconstructed `ExtractedTable` if found
 pub fn get_table(mem: &mut Memvid, table_id: &str) -> Result<Option<ExtractedTable>> {
     // First, find the meta frame ID by scanning frames
     let meta_frame_id: Option<FrameId> = mem
@@ -353,8 +353,7 @@ pub fn get_table(mem: &mut Memvid, table_id: &str) -> Result<Option<ExtractedTab
             f.kind.as_deref() == Some(TABLE_META_KIND)
                 && f.extra_metadata
                     .get("table_id")
-                    .map(|id| id == table_id)
-                    .unwrap_or(false)
+                    .is_some_and(|id| id == table_id)
         })
         .map(|(id, _)| id as FrameId);
 
@@ -420,8 +419,7 @@ pub fn get_table(mem: &mut Memvid, table_id: &str) -> Result<Option<ExtractedTab
             f.kind.as_deref() == Some(TABLE_ROW_KIND)
                 && f.extra_metadata
                     .get("table_id")
-                    .map(|id| id == table_id)
-                    .unwrap_or(false)
+                    .is_some_and(|id| id == table_id)
         })
         .map(|(id, f)| {
             let row_index = f
@@ -482,6 +480,7 @@ pub fn get_table(mem: &mut Memvid, table_id: &str) -> Result<Option<ExtractedTab
 ///
 /// # Returns
 /// CSV formatted string
+#[must_use] 
 pub fn export_to_csv(table: &ExtractedTable) -> String {
     let mut output = String::new();
 

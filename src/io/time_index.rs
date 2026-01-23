@@ -15,7 +15,7 @@ pub struct TimeIndexEntry {
 }
 
 impl TimeIndexEntry {
-    #[must_use] 
+    #[must_use]
     pub fn new(timestamp: i64, frame_id: u64) -> Self {
         Self {
             timestamp,
@@ -95,6 +95,7 @@ pub fn read_track<R: Read + Seek>(
         });
     }
 
+    // Safe: count validated by checked_mul and payload_bytes comparison above
     let mut entries = Vec::with_capacity(count as usize);
     let mut prev: Option<TimeIndexEntry> = None;
     for _ in 0..count {
@@ -127,7 +128,7 @@ pub fn read_track<R: Read + Seek>(
 }
 
 /// Calculates the checksum for the provided entries in canonical order.
-#[must_use] 
+#[must_use]
 pub fn calculate_checksum(entries: &[TimeIndexEntry]) -> [u8; 32] {
     let mut sorted = entries.to_vec();
     sorted.sort_by_key(|entry| (entry.timestamp, entry.frame_id));
