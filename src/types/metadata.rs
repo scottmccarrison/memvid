@@ -53,10 +53,10 @@ impl DocMetadata {
             && self.hash.is_none()
             && self.width.is_none()
             && self.height.is_none()
-            && self.colors.as_ref().map_or(true, Vec::is_empty)
+            && self.colors.as_ref().is_none_or(Vec::is_empty)
             && self.caption.is_none()
             && self.exif.is_none()
-            && self.audio.as_ref().map_or(true, DocAudioMetadata::is_empty)
+            && self.audio.as_ref().is_none_or(DocAudioMetadata::is_empty)
             && self.media.is_none()
     }
 }

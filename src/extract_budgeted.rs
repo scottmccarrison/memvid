@@ -43,6 +43,7 @@ impl Default for ExtractionBudget {
 
 impl ExtractionBudget {
     /// Create a budget with custom milliseconds.
+    #[must_use]
     pub fn with_ms(ms: u64) -> Self {
         Self {
             budget: Duration::from_millis(ms),
@@ -51,6 +52,7 @@ impl ExtractionBudget {
     }
 
     /// Create an unlimited budget (extract everything).
+    #[must_use]
     pub fn unlimited() -> Self {
         Self {
             budget: Duration::from_secs(3600), // 1 hour = effectively unlimited
@@ -79,11 +81,13 @@ pub struct BudgetedExtractionResult {
 
 impl BudgetedExtractionResult {
     /// Check if we got meaningful content.
+    #[must_use]
     pub fn has_content(&self) -> bool {
         !self.text.trim().is_empty()
     }
 
     /// Check if this is a skim (partial) extraction.
+    #[must_use]
     pub fn is_skim(&self) -> bool {
         !self.completed && self.sections_extracted < self.sections_total
     }
@@ -134,7 +138,7 @@ pub fn extract_pdf_budgeted(
                             sections_extracted: estimated_pages,
                             sections_total: estimated_pages,
                             completed,
-                            elapsed_ms: start.elapsed().as_millis() as u64,
+                            elapsed_ms: start.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
                             coverage: 1.0,
                         });
                     }
@@ -176,7 +180,7 @@ pub fn extract_pdf_budgeted(
                         sections_extracted: estimated_pages,
                         sections_total: estimated_pages,
                         completed,
-                        elapsed_ms: start.elapsed().as_millis() as u64,
+                        elapsed_ms: start.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
                         coverage: 1.0,
                     });
                 }
@@ -229,16 +233,14 @@ fn extract_pdf_budgeted_lopdf(
         })?;
 
     // Handle encryption
-    if document.is_encrypted() {
-        if document.decrypt("").is_err() {
-            return Err(MemvidError::ExtractionFailed {
-                reason: "cannot decrypt password-protected PDF".into(),
-            });
-        }
+    if document.is_encrypted() && document.decrypt("").is_err() {
+        return Err(MemvidError::ExtractionFailed {
+            reason: "cannot decrypt password-protected PDF".into(),
+        });
     }
 
     // Decompress for better extraction
-    let _ = document.decompress();
+    let () = document.decompress();
 
     // Get page numbers
     let mut page_numbers: Vec<u32> = document.get_pages().keys().copied().collect();
@@ -248,7 +250,7 @@ fn extract_pdf_budgeted_lopdf(
             sections_extracted: 0,
             sections_total: 0,
             completed: true,
-            elapsed_ms: start.elapsed().as_millis() as u64,
+            elapsed_ms: start.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
             coverage: 1.0,
         });
     }
@@ -357,7 +359,7 @@ pub fn extract_text_budgeted(
         sections_extracted: sections,
         sections_total: sections,
         completed: true,
-        elapsed_ms: start.elapsed().as_millis() as u64,
+        elapsed_ms: start.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
         coverage: 1.0,
     })
 }
@@ -385,7 +387,7 @@ fn extract_ooxml_budgeted(
     let start = Instant::now();
 
     // Determine the document format from MIME first, then fall back to extension
-    let format = match mime.map(|m| m.to_lowercase()).as_deref() {
+    let format = match mime.map(str::to_lowercase).as_deref() {
         Some(m) if m.contains("spreadsheetml") => Some(DocumentFormat::Xlsx),
         Some(m) if m.contains("wordprocessingml") => Some(DocumentFormat::Docx),
         Some(m) if m.contains("presentationml") => Some(DocumentFormat::Pptx),
@@ -426,7 +428,7 @@ fn extract_ooxml_budgeted(
                     sections_extracted: sections,
                     sections_total: sections,
                     completed: true,
-                    elapsed_ms: start.elapsed().as_millis() as u64,
+                    elapsed_ms: start.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
                     coverage: 1.0,
                 })
             }
@@ -439,7 +441,7 @@ fn extract_ooxml_budgeted(
             sections_extracted: 0,
             sections_total: 0,
             completed: true,
-            elapsed_ms: start.elapsed().as_millis() as u64,
+            elapsed_ms: start.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
             coverage: 1.0,
         })
     }
@@ -453,7 +455,7 @@ pub fn extract_with_budget(
     budget: ExtractionBudget,
 ) -> Result<BudgetedExtractionResult> {
     // Check if PDF
-    let is_pdf = mime.map_or(false, |m| m.contains("pdf")) || is_pdf_magic(bytes);
+    let is_pdf = mime.is_some_and(|m| m.contains("pdf")) || is_pdf_magic(bytes);
 
     if is_pdf {
         extract_pdf_budgeted(bytes, budget)
@@ -585,7 +587,7 @@ fn finish_extraction(
         sections_extracted,
         sections_total: total_pages,
         completed,
-        elapsed_ms: start.elapsed().as_millis() as u64,
+        elapsed_ms: start.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
         coverage,
     })
 }

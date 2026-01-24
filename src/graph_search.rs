@@ -2,7 +2,7 @@
 //!
 //! This module provides hybrid retrieval that can:
 //! 1. Parse natural language queries for relational patterns
-//! 2. Match patterns against entity state (MemoryCards) or graph (Logic-Mesh)
+//! 2. Match patterns against entity state (`MemoryCards`) or graph (Logic-Mesh)
 //! 3. Combine graph-filtered candidates with vector ranking
 
 use std::collections::{HashMap, HashSet};
@@ -186,18 +186,20 @@ fn extract_possessive_query(query: &str) -> Option<(String, String)> {
     None
 }
 
-/// Graph matcher that executes patterns against MemoryCards.
+/// Graph matcher that executes patterns against `MemoryCards`.
 pub struct GraphMatcher<'a> {
     memvid: &'a Memvid,
 }
 
 impl<'a> GraphMatcher<'a> {
     /// Create a new graph matcher.
+    #[must_use]
     pub fn new(memvid: &'a Memvid) -> Self {
         Self { memvid }
     }
 
     /// Execute a graph pattern and return matching results.
+    #[must_use]
     pub fn execute(&self, pattern: &GraphPattern) -> Vec<GraphMatchResult> {
         let mut results = Vec::new();
 

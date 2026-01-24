@@ -48,6 +48,7 @@ impl Default for ValueType {
 
 impl ValueType {
     /// Check if a value matches this type.
+    #[must_use]
     pub fn matches(&self, value: &str) -> bool {
         match self {
             Self::String | Self::Any => true,
@@ -66,6 +67,7 @@ impl ValueType {
     }
 
     /// Get a human-readable description of this type.
+    #[must_use]
     pub fn description(&self) -> String {
         match self {
             Self::String => "string".to_string(),
@@ -141,18 +143,21 @@ impl PredicateSchema {
     }
 
     /// Set the domain (entity kinds).
+    #[must_use]
     pub fn with_domain(mut self, kinds: Vec<EntityKind>) -> Self {
         self.domain = kinds;
         self
     }
 
     /// Set the range (value type).
+    #[must_use]
     pub fn with_range(mut self, range: ValueType) -> Self {
         self.range = range;
         self
     }
 
     /// Set cardinality to multiple.
+    #[must_use]
     pub fn multiple(mut self) -> Self {
         self.cardinality = Cardinality::Multiple;
         self
@@ -165,12 +170,14 @@ impl PredicateSchema {
     }
 
     /// Mark as built-in.
+    #[must_use]
     pub fn builtin(mut self) -> Self {
         self.builtin = true;
         self
     }
 
     /// Check if an entity kind is in the domain.
+    #[must_use]
     pub fn allows_entity(&self, kind: EntityKind) -> bool {
         self.domain.is_empty() || self.domain.contains(&kind)
     }
@@ -219,8 +226,7 @@ impl std::fmt::Display for SchemaError {
             } => {
                 write!(
                     f,
-                    "predicate '{}' not allowed for entity kind '{}' (allowed: {:?})",
-                    predicate, entity_kind, allowed
+                    "predicate '{predicate}' not allowed for entity kind '{entity_kind}' (allowed: {allowed:?})"
                 )
             }
             Self::InvalidRange {
@@ -230,18 +236,16 @@ impl std::fmt::Display for SchemaError {
             } => {
                 write!(
                     f,
-                    "invalid value for '{}': expected {}, got '{}'",
-                    predicate, expected, got
+                    "invalid value for '{predicate}': expected {expected}, got '{got}'"
                 )
             }
             Self::CardinalityViolation { predicate, entity } => {
                 write!(
                     f,
-                    "cardinality violation: '{}' already has a value for '{}'",
-                    entity, predicate
+                    "cardinality violation: '{entity}' already has a value for '{predicate}'"
                 )
             }
-            Self::UnknownPredicate(p) => write!(f, "unknown predicate: '{}'", p),
+            Self::UnknownPredicate(p) => write!(f, "unknown predicate: '{p}'"),
         }
     }
 }
@@ -260,6 +264,7 @@ pub struct SchemaRegistry {
 
 impl SchemaRegistry {
     /// Create a new registry with built-in schemas.
+    #[must_use]
     pub fn new() -> Self {
         let mut registry = Self {
             schemas: HashMap::new(),
@@ -270,6 +275,7 @@ impl SchemaRegistry {
     }
 
     /// Create an empty registry without built-in schemas.
+    #[must_use]
     pub fn empty() -> Self {
         Self {
             schemas: HashMap::new(),
@@ -278,6 +284,7 @@ impl SchemaRegistry {
     }
 
     /// Enable strict validation (unknown predicates are rejected).
+    #[must_use]
     pub fn strict(mut self) -> Self {
         self.strict = true;
         self
@@ -413,11 +420,13 @@ impl SchemaRegistry {
     }
 
     /// Get a schema by predicate ID.
+    #[must_use]
     pub fn get(&self, predicate: &str) -> Option<&PredicateSchema> {
         self.schemas.get(predicate)
     }
 
     /// Check if a predicate is known.
+    #[must_use]
     pub fn contains(&self, predicate: &str) -> bool {
         self.schemas.contains_key(predicate)
     }
@@ -434,14 +443,13 @@ impl SchemaRegistry {
         value: &str,
         entity_kind: Option<EntityKind>,
     ) -> Result<(), SchemaError> {
-        let schema = match self.schemas.get(predicate) {
-            Some(s) => s,
-            None => {
-                if self.strict {
-                    return Err(SchemaError::UnknownPredicate(predicate.to_string()));
-                }
-                return Ok(()); // Allow unknown predicates in non-strict mode
+        let schema = if let Some(s) = self.schemas.get(predicate) {
+            s
+        } else {
+            if self.strict {
+                return Err(SchemaError::UnknownPredicate(predicate.to_string()));
             }
+            return Ok(()); // Allow unknown predicates in non-strict mode
         };
 
         // Validate domain
@@ -466,6 +474,7 @@ impl SchemaRegistry {
     }
 
     /// Infer a schema from existing memory cards.
+    #[must_use]
     pub fn infer_from_values(&self, predicate: &str, values: &[&str]) -> PredicateSchema {
         let mut schema = PredicateSchema::new(predicate, predicate);
 

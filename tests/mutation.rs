@@ -22,11 +22,12 @@ fn put_bytes_basic() {
         ..Default::default()
     };
 
-    let frame_id = mem.put_bytes_with_options(b"Hello, World!", opts).unwrap();
+    let _frame_id = mem.put_bytes_with_options(b"Hello, World!", opts).unwrap();
     mem.commit().unwrap();
 
     // Verify frame was created
-    assert!(frame_id > 0 || frame_id == 0, "Frame ID should be valid");
+    // Verify frame was created (FrameId is u64 so >= 0 is implied)
+    // assert!(frame_id >= 0);
 
     let mem = Memvid::open_read_only(&path).unwrap();
     assert_eq!(mem.stats().unwrap().frame_count, 1, "Should have 1 frame");

@@ -1,7 +1,7 @@
 //! Triplet extraction types for structured knowledge extraction.
 //!
 //! Triplets are Subject-Predicate-Object relationships extracted from text.
-//! They map directly to MemoryCards: entity=Subject, slot=Predicate, value=Object.
+//! They map directly to `MemoryCards`: entity=Subject, slot=Predicate, value=Object.
 
 use serde::{Deserialize, Serialize};
 

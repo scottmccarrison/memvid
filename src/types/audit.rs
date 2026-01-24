@@ -130,6 +130,7 @@ pub struct AuditReport {
 
 impl AuditReport {
     /// Format the report as human-readable text.
+    #[must_use]
     pub fn to_text(&self) -> String {
         let mut output = String::new();
 
@@ -198,11 +199,11 @@ impl AuditReport {
             output.push_str(&format!("\n[{}] {}\n", source.index, source.uri));
             output.push_str("    ─────────────────────────────────────────────────────────────\n");
             if let Some(title) = &source.title {
-                output.push_str(&format!("    Title:       {}\n", title));
+                output.push_str(&format!("    Title:       {title}\n"));
             }
             output.push_str(&format!("    Frame ID:    {}\n", source.frame_id));
             if let Some(score) = source.score {
-                output.push_str(&format!("    Score:       {:.4}\n", score));
+                output.push_str(&format!("    Score:       {score:.4}\n"));
             }
             if let Some((start, end)) = source.chunk_range {
                 output.push_str(&format!(
@@ -223,7 +224,7 @@ impl AuditReport {
                 } else {
                     tags_display.join(", ")
                 };
-                output.push_str(&format!("    Tags:        {}\n", tags_str));
+                output.push_str(&format!("    Tags:        {tags_str}\n"));
             }
             if let Some(ts) = source.frame_timestamp {
                 output.push_str(&format!("    Indexed:     {}\n", format_timestamp(ts)));
@@ -237,7 +238,7 @@ impl AuditReport {
                 // Format snippet with proper indentation and word wrap
                 let formatted = format_snippet_block(snippet, 64, "    │ ");
                 output.push_str(&formatted);
-                output.push_str("\n");
+                output.push('\n');
             }
         }
 
@@ -257,7 +258,7 @@ impl AuditReport {
                 "──────────────────────────────────────────────────────────────────────\n\n",
             );
             for note in important_notes {
-                output.push_str(&format!("  • {}\n", note));
+                output.push_str(&format!("  • {note}\n"));
             }
         }
 
@@ -269,6 +270,7 @@ impl AuditReport {
     }
 
     /// Format the report as Markdown.
+    #[must_use]
     pub fn to_markdown(&self) -> String {
         let mut output = String::new();
 
@@ -322,7 +324,7 @@ impl AuditReport {
             output.push_str(&format!("**URI:** `{}`\n\n", source.uri));
 
             if let Some(title) = &source.title {
-                output.push_str(&format!("**Title:** {}\n\n", title));
+                output.push_str(&format!("**Title:** {title}\n\n"));
             }
 
             // Metadata table
@@ -330,7 +332,7 @@ impl AuditReport {
             output.push_str("|:---------|:------|\n");
             output.push_str(&format!("| Frame ID | {} |\n", source.frame_id));
             if let Some(score) = source.score {
-                output.push_str(&format!("| Relevance Score | {:.4} |\n", score));
+                output.push_str(&format!("| Relevance Score | {score:.4} |\n"));
             }
             if let Some((start, end)) = source.chunk_range {
                 output.push_str(&format!(
@@ -343,14 +345,14 @@ impl AuditReport {
             if let Some(ts) = source.frame_timestamp {
                 output.push_str(&format!("| Indexed | {} |\n", format_timestamp(ts)));
             }
-            output.push_str("\n");
+            output.push('\n');
 
             if !source.tags.is_empty() {
                 let tags: Vec<_> = source
                     .tags
                     .iter()
                     .take(8)
-                    .map(|t| format!("`{}`", t))
+                    .map(|t| format!("`{t}`"))
                     .collect();
                 output.push_str(&format!("**Tags:** {}\n\n", tags.join(" ")));
             }
@@ -380,9 +382,9 @@ impl AuditReport {
         if !important_notes.is_empty() {
             output.push_str("## Notes\n\n");
             for note in important_notes {
-                output.push_str(&format!("- {}\n", note));
+                output.push_str(&format!("- {note}\n"));
             }
-            output.push_str("\n");
+            output.push('\n');
         }
 
         output
@@ -413,13 +415,11 @@ fn format_snippet_block(text: &str, width: usize, prefix: &str) -> String {
     let mut line = String::new();
 
     for word in cleaned.split_whitespace() {
-        if line.len() + word.len() + 1 > width {
-            if !line.is_empty() {
-                result.push_str(prefix);
-                result.push_str(&line);
-                result.push('\n');
-                line.clear();
-            }
+        if line.len() + word.len() + 1 > width && !line.is_empty() {
+            result.push_str(prefix);
+            result.push_str(&line);
+            result.push('\n');
+            line.clear();
         }
         if !line.is_empty() {
             line.push(' ');
@@ -452,7 +452,7 @@ fn clean_snippet(text: &str, max_len: usize) -> String {
         if let Some(last_space) = truncated.rfind(' ') {
             format!("{}...", &truncated[..last_space])
         } else {
-            format!("{}...", truncated)
+            format!("{truncated}...")
         }
     }
 }
@@ -476,6 +476,8 @@ fn format_timestamp(ts: i64) -> String {
 
     // Approximate year/month/day calculation
     let mut year = 1970i32;
+    // Safe: days will fit in i32 for any reasonable usage (millions of years)
+    #[allow(clippy::cast_possible_truncation)]
     let mut remaining_days = days as i32;
 
     loop {
@@ -504,10 +506,7 @@ fn format_timestamp(ts: i64) -> String {
 
     let day = remaining_days + 1;
 
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        year, month, day, hours, minutes, seconds
-    )
+    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{minutes:02}:{seconds:02}Z")
 }
 
 fn is_leap_year(year: i32) -> bool {

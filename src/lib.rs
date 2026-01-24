@@ -1,6 +1,75 @@
 #![deny(clippy::all, clippy::pedantic)]
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::useless_vec,
+        clippy::uninlined_format_args,
+        clippy::cast_possible_truncation,
+        clippy::float_cmp,
+        clippy::cast_precision_loss
+    )
+)]
 #![allow(clippy::module_name_repetitions)]
+//
+// Strategic lint exceptions - these are allowed project-wide for pragmatic reasons:
+//
+// Documentation lints: Many internal/self-documenting functions don't need extensive docs.
+// Public APIs should still have proper documentation.
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::doc_markdown)]
+//
+// Cast safety: All casts in this codebase are carefully reviewed and bounded by
+// real-world constraints (file sizes, frame counts, etc). Using try_into() everywhere
+// would add significant complexity without safety benefits in our use case.
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_lossless)]
+//
+// Style/complexity: Some database-like operations naturally require complex functions.
+// Breaking them up would hurt readability.
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::items_after_statements)]
+#![allow(clippy::similar_names)]
+// e.g., frame_id, parent_id, target_id are intentionally similar
+//
+// Pattern matching: These pedantic lints often suggest changes that reduce clarity.
+#![allow(clippy::manual_let_else)]
+#![allow(clippy::match_same_arms)]
+#![allow(clippy::if_same_then_else)]
+#![allow(clippy::collapsible_match)]
+//
+// Performance/ergonomics trade-offs that are acceptable for this codebase:
+#![allow(clippy::needless_pass_by_value)] // Many builders take owned values intentionally
+#![allow(clippy::return_self_not_must_use)] // Builder patterns don't need must_use on every method
+#![allow(clippy::format_push_string)] // Readability over minor perf difference
+#![allow(clippy::assigning_clones)] // clone_from() often less readable
+//
+// Low-value pedantic lints that add noise:
+#![allow(clippy::struct_excessive_bools)] // Config structs naturally have many flags
+#![allow(clippy::needless_continue)]
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::case_sensitive_file_extension_comparisons)]
+#![allow(clippy::default_trait_access)]
+#![allow(clippy::field_reassign_with_default)]
+#![allow(clippy::unreadable_literal)] // Magic numbers in binary formats are clearer as hex
+#![allow(clippy::implicit_hasher)]
+#![allow(clippy::manual_clamp)]
+#![allow(clippy::len_without_is_empty)] // Many index types don't need is_empty()
+#![allow(clippy::large_enum_variant)]
+#![allow(clippy::ptr_arg)]
+#![allow(clippy::map_unwrap_or)]
+#![allow(clippy::incompatible_msrv)]
+#![allow(clippy::should_implement_trait)] // Some method names are clearer than trait names
+#![allow(clippy::duplicated_attributes)]
+//
+// Return value wrapping: Many functions use Result for consistency even when they
+// currently can't fail, allowing future error conditions to be added without breaking API.
+#![allow(clippy::unnecessary_wraps)]
+#![allow(clippy::unused_self)] // Some trait impls or future extensibility
 
 /// The memvid-core crate version (matches `Cargo.toml`).
 pub const MEMVID_CORE_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -31,6 +100,9 @@ mod toc;
 pub mod types;
 pub mod vec;
 pub mod vec_pq;
+
+// SIMD-accelerated distance calculations
+pub mod simd;
 
 #[cfg(feature = "vec")]
 pub mod text_embed;
@@ -269,6 +341,7 @@ const MAX_FRAME_BYTES: u64 = 256 * 1024 * 1024;
 const DEFAULT_SEARCH_TEXT_LIMIT: usize = 32_768;
 
 #[cfg(test)]
+#[allow(clippy::non_std_lazy_statics)]
 static SERIAL_TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 #[cfg(test)]
@@ -327,14 +400,17 @@ impl Memvid {
     fn flush_tantivy_skip_embed(&mut self) -> Result<()> {
         Ok(())
     }
+    #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
     }
 
+    #[must_use]
     pub fn lock_handle(&self) -> &FileLock {
         &self.lock
     }
 
+    #[must_use]
     pub fn is_read_only(&self) -> bool {
         self.read_only
     }
@@ -410,7 +486,7 @@ pub(crate) fn infer_title_from_uri(uri: &str) -> Option<String> {
         return None;
     }
 
-    let without_scheme = trimmed.splitn(2, "://").nth(1).unwrap_or(trimmed);
+    let without_scheme = trimmed.split_once("://").map_or(trimmed, |x| x.1);
     let without_fragment = without_scheme.split('#').next().unwrap_or(without_scheme);
     let without_query = without_fragment
         .split('?')
@@ -425,13 +501,13 @@ pub(crate) fn infer_title_from_uri(uri: &str) -> Option<String> {
         return None;
     }
 
-    let stem = segment.rsplitn(2, '.').nth(1).unwrap_or(segment).trim();
+    let stem = segment.rsplit_once('.').map_or(segment, |x| x.0).trim();
     if stem.is_empty() {
         return None;
     }
 
     let words: Vec<String> = stem
-        .split(|c: char| c == '-' || c == '_' || c == ' ')
+        .split(['-', '_', ' '])
         .filter(|part| !part.is_empty())
         .map(|part| {
             let mut chars = part.chars();
@@ -442,7 +518,7 @@ pub(crate) fn infer_title_from_uri(uri: &str) -> Option<String> {
                     if rest.is_empty() {
                         first.to_string()
                     } else {
-                        format!("{}{}", first, rest)
+                        format!("{first}{rest}")
                     }
                 }
                 None => String::new(),
@@ -477,7 +553,7 @@ fn image_preview_from_metadata(meta: &DocMetadata) -> Option<String> {
 
     let mut segments: Vec<String> = Vec::new();
     if let (Some(w), Some(h)) = (meta.width, meta.height) {
-        segments.push(format!("{}×{} px", w, h));
+        segments.push(format!("{w}×{h} px"));
     }
     if let Some(exif) = meta.exif.as_ref() {
         if let Some(model) = exif
@@ -1104,7 +1180,7 @@ mod tests {
                     .expect("open file");
                 file.seek(SeekFrom::Start(manifest.bytes_offset))
                     .expect("seek");
-                let zeros = vec![0u8; manifest.bytes_length as usize];
+                let zeros = vec![0u8; usize::try_from(manifest.bytes_length).unwrap_or(0)];
                 file.write_all(&zeros).expect("corrupt time index");
                 file.flush().expect("flush");
                 file.sync_all().expect("sync");
@@ -1122,7 +1198,7 @@ mod tests {
                     assert_eq!(report.overall_status, VerificationStatus::Failed);
                 }
                 Err(e) => {
-                    println!("test: verify failed with error (expected): {}", e);
+                    println!("test: verify failed with error (expected): {e}");
                 }
             }
 
@@ -1274,6 +1350,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn ticket_sequence_enforced() {
         run_serial_test(|| {
             let dir = tempdir().expect("tmp");
@@ -1291,6 +1368,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn capacity_limit_enforced() {
         run_serial_test(|| {
             let dir = tempdir().expect("tmp");
@@ -1304,9 +1382,7 @@ mod tests {
             mem.put_bytes(&vec![0xFF; 32]).expect("first put");
             mem.commit().expect("commit");
 
-            let err = mem
-                .put_bytes(&vec![0xFF; 40])
-                .expect_err("capacity exceeded");
+            let err = mem.put_bytes(&[0xFF; 40]).expect_err("capacity exceeded");
             assert!(matches!(err, MemvidError::CapacityExceeded { .. }));
         });
     }

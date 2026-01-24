@@ -1,3 +1,5 @@
+// Safe unwrap: fixed-size byte conversions.
+#![allow(clippy::unwrap_used)]
 //! Time-travel replay for agent sessions.
 //!
 //! This module provides deterministic recording and replay of agent sessions,
@@ -114,6 +116,7 @@ impl ActiveSession {
     }
 
     /// End the session and return it
+    #[must_use]
     pub fn end(mut self) -> ReplaySession {
         self.session.end();
         self.session
@@ -128,7 +131,7 @@ impl ActiveSession {
 
 /// Storage operations for replay segments
 pub mod storage {
-    use super::*;
+    use super::{MemvidError, REPLAY_SEGMENT_MAGIC, REPLAY_SEGMENT_VERSION, ReplaySession, Result};
     use bincode::config::{self, Config};
     use std::io::{Read, Write};
 
@@ -206,7 +209,7 @@ pub mod storage {
     pub fn serialize_session(session: &ReplaySession) -> Result<Vec<u8>> {
         bincode::serde::encode_to_vec(session, bincode_config()).map_err(|e| {
             MemvidError::InvalidToc {
-                reason: format!("Failed to serialize replay session: {}", e).into(),
+                reason: format!("Failed to serialize replay session: {e}").into(),
             }
         })
     }
@@ -216,7 +219,7 @@ pub mod storage {
         bincode::serde::decode_from_slice(data, bincode_config())
             .map(|(session, _)| session)
             .map_err(|e| MemvidError::InvalidToc {
-                reason: format!("Failed to deserialize replay session: {}", e).into(),
+                reason: format!("Failed to deserialize replay session: {e}").into(),
             })
     }
 
@@ -232,11 +235,11 @@ pub mod storage {
         }
 
         let header = ReplaySegmentHeader::new(
-            sessions.len() as u32,
+            u32::try_from(sessions.len()).unwrap_or(u32::MAX),
             ReplaySegmentHeader::SIZE as u64 + total_session_bytes,
         );
 
-        let mut segment = Vec::with_capacity(header.total_size as usize);
+        let mut segment = Vec::with_capacity(usize::try_from(header.total_size).unwrap_or(0));
         header.write(&mut segment)?;
 
         // Write each session with length prefix
@@ -257,7 +260,7 @@ pub mod storage {
         for _ in 0..header.session_count {
             let mut len_bytes = [0u8; 8];
             cursor.read_exact(&mut len_bytes)?;
-            let len = u64::from_le_bytes(len_bytes) as usize;
+            let len = usize::try_from(u64::from_le_bytes(len_bytes)).unwrap_or(0);
 
             let mut session_data = vec![0u8; len];
             cursor.read_exact(&mut session_data)?;
@@ -279,7 +282,7 @@ pub mod storage {
         let session_bytes =
             bincode::serde::encode_to_vec(session, bincode_config()).map_err(|e| {
                 MemvidError::InvalidToc {
-                    reason: format!("Failed to serialize active session: {}", e).into(),
+                    reason: format!("Failed to serialize active session: {e}").into(),
                 }
             })?;
         data.extend_from_slice(&(session_bytes.len() as u64).to_le_bytes());
@@ -299,7 +302,7 @@ pub mod storage {
                 reason: "Invalid active session magic".into(),
             });
         }
-        let len = u64::from_le_bytes(data[8..16].try_into().unwrap()) as usize;
+        let len = usize::try_from(u64::from_le_bytes(data[8..16].try_into().unwrap())).unwrap_or(0);
         if data.len() < 16 + len {
             return Err(MemvidError::InvalidToc {
                 reason: "Active session data truncated".into(),
@@ -308,7 +311,7 @@ pub mod storage {
         bincode::serde::decode_from_slice(&data[16..16 + len], bincode_config())
             .map(|(session, _)| session)
             .map_err(|e| MemvidError::InvalidToc {
-                reason: format!("Failed to deserialize active session: {}", e).into(),
+                reason: format!("Failed to deserialize active session: {e}").into(),
             })
     }
 }

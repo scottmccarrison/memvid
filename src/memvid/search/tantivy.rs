@@ -1,5 +1,6 @@
+// Safe unwrap: regex from validated patterns.
+#![allow(clippy::unwrap_used)]
 #![cfg(feature = "lex")]
-
 #[cfg(feature = "temporal_track")]
 use super::helpers::attach_temporal_metadata;
 use super::helpers::{
@@ -74,7 +75,7 @@ pub(super) fn try_tantivy_search(
     ) {
         Ok(hits) => hits,
         Err(err) => {
-            warn!("tantivy search failed: {}", err);
+            warn!("tantivy search failed: {err}");
             return Ok(None);
         }
     };
@@ -92,8 +93,7 @@ pub(super) fn try_tantivy_search(
             .indexes
             .lex
             .as_ref()
-            .map(|manifest| manifest.bytes_length > 0)
-            .unwrap_or(false);
+            .is_some_and(|manifest| manifest.bytes_length > 0);
         if has_lex_data {
             memvid.ensure_lex_index()?;
             return Ok(Some(super::fallback::search_with_lex_fallback(
@@ -123,7 +123,7 @@ pub(super) fn try_tantivy_search(
         let frame_meta = memvid
             .toc
             .frames
-            .get(hit.frame_id as usize)
+            .get(usize::try_from(hit.frame_id).unwrap_or(usize::MAX))
             .cloned()
             .ok_or(MemvidError::InvalidTimeIndex {
                 reason: "frame id out of range".into(),
@@ -201,6 +201,7 @@ pub(super) fn try_tantivy_search(
             .map(|(hit, occurrences, slices, chunk_info, timestamp)| {
                 let bm25_score = hit.score;
                 // Age relative to the most recent document in results
+                #[allow(clippy::cast_precision_loss)]
                 let age_seconds = (max_ts - timestamp).max(0) as f32;
                 // Decay factor: half-life of ~1 day for aggressive recency preference
                 // This ensures even a few days difference has significant impact
@@ -268,7 +269,7 @@ pub(super) fn try_tantivy_search(
         let frame_meta = memvid
             .toc
             .frames
-            .get(hit.frame_id as usize)
+            .get(usize::try_from(hit.frame_id).unwrap_or(usize::MAX))
             .cloned()
             .ok_or(MemvidError::InvalidTimeIndex {
                 reason: "frame id out of range".into(),
@@ -383,6 +384,7 @@ fn uri_matches(candidate: Option<&str>, expected: &str) -> bool {
 /// Parse content dates (from frame metadata) to find the most relevant timestamp.
 /// Content dates are strings like "2023/06/30 (Fri) 14:20", ISO dates, or spelled-out dates.
 /// Returns the most recent timestamp found, or None if parsing fails.
+#[must_use]
 pub fn parse_content_date_to_timestamp(content_dates: &[String]) -> Option<i64> {
     if content_dates.is_empty() {
         return None;
@@ -408,8 +410,7 @@ pub fn parse_content_date_to_timestamp(content_dates: &[String]) -> Option<i64> 
         if let Ok(date) = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
             let ts = date
                 .and_hms_opt(0, 0, 0)
-                .map(|dt| dt.and_utc().timestamp())
-                .unwrap_or(0);
+                .map_or(0, |dt| dt.and_utc().timestamp());
             if ts > 0 {
                 best_ts = Some(best_ts.map_or(ts, |prev| prev.max(ts)));
                 continue;
@@ -435,8 +436,7 @@ pub fn parse_content_date_to_timestamp(content_dates: &[String]) -> Option<i64> 
                 if let Some(date) = chrono::NaiveDate::from_ymd_opt(year, 1, 1) {
                     let ts = date
                         .and_hms_opt(0, 0, 0)
-                        .map(|dt| dt.and_utc().timestamp())
-                        .unwrap_or(0);
+                        .map_or(0, |dt| dt.and_utc().timestamp());
                     if ts > 0 {
                         best_ts = Some(best_ts.map_or(ts, |prev| prev.max(ts)));
                     }
@@ -475,8 +475,8 @@ fn parse_spelled_date(s: &str) -> Option<i64> {
 
 /// Strip ordinal suffixes from day numbers: "1st" -> "1", "2nd" -> "2", etc.
 fn strip_ordinal_suffixes(s: &str) -> String {
-    static ORDINAL_RE: once_cell::sync::Lazy<regex::Regex> =
-        once_cell::sync::Lazy::new(|| regex::Regex::new(r"(\d+)(?:st|nd|rd|th)\b").unwrap());
+    static ORDINAL_RE: std::sync::LazyLock<regex::Regex> =
+        std::sync::LazyLock::new(|| regex::Regex::new(r"(\d+)(?:st|nd|rd|th)\b").unwrap());
     ORDINAL_RE.replace_all(s, "$1").to_string()
 }
 

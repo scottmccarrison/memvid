@@ -1,10 +1,11 @@
+// Safe expect: Regex patterns are compile-time literals, verified valid.
+#![allow(clippy::expect_used)]
 //! PII (Personally Identifiable Information) detection and masking
 //!
 //! This module provides functionality to detect and mask sensitive PII in text
 //! before sending it to LLMs or external services. The masking happens at query
 //! time, so the original data remains fully searchable in the .mv2 file.
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 
 /// Masks PII (Personally Identifiable Information) in the given text.
@@ -80,17 +81,17 @@ pub fn contains_pii(text: &str) -> bool {
 // Regex patterns for PII detection
 // Using Lazy to compile regexes once at first use
 
-static EMAIL_REGEX: Lazy<Regex> = Lazy::new(|| {
+static EMAIL_REGEX: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
     Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b").expect("invalid email regex")
 });
 
-static SSN_REGEX: Lazy<Regex> = Lazy::new(|| {
+static SSN_REGEX: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
     // Matches: 123-45-6789, 123 45 6789, or 123456789
     // Uses word boundaries to avoid false positives
     Regex::new(r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b").expect("invalid SSN regex")
 });
 
-static PHONE_REGEX: Lazy<Regex> = Lazy::new(|| {
+static PHONE_REGEX: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
     // Matches various phone formats:
     // (555) 123-4567, 555-123-4567, +1-555-123-4567, 555.123.4567, 5551234567, 555-1234
     Regex::new(
@@ -99,7 +100,7 @@ static PHONE_REGEX: Lazy<Regex> = Lazy::new(|| {
     .expect("invalid phone regex")
 });
 
-static CREDIT_CARD_REGEX: Lazy<Regex> = Lazy::new(|| {
+static CREDIT_CARD_REGEX: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
     // Matches credit card numbers:
     // - Standard 16 digits: 4532-1234-5678-9010, 4532 1234 5678 9010
     // - Amex 15 digits: 3782-822463-10005, 3782 822463 10005
@@ -110,13 +111,13 @@ static CREDIT_CARD_REGEX: Lazy<Regex> = Lazy::new(|| {
     .expect("invalid credit card regex")
 });
 
-static IPV4_REGEX: Lazy<Regex> = Lazy::new(|| {
+static IPV4_REGEX: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
     // Matches IPv4 addresses: 192.168.1.1
     Regex::new(r"\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b")
         .expect("invalid IPv4 regex")
 });
 
-static API_KEY_REGEX: Lazy<Regex> = Lazy::new(|| {
+static API_KEY_REGEX: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
     // Matches common API key patterns:
     // - Stripe: sk_live_..., pk_test_...
     // - GitHub: ghp_..., gho_...
@@ -128,7 +129,7 @@ static API_KEY_REGEX: Lazy<Regex> = Lazy::new(|| {
     .expect("invalid API key regex")
 });
 
-static TOKEN_REGEX: Lazy<Regex> = Lazy::new(|| {
+static TOKEN_REGEX: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
     // Matches bearer tokens and JWT-like patterns
     // Long base64-like strings that look like tokens (40+ chars)
     Regex::new(r"\b[A-Za-z0-9_\-]{40,}\.[A-Za-z0-9_\-]{6,}\.[A-Za-z0-9_\-]{6,}\b")

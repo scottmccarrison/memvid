@@ -18,12 +18,12 @@ impl XlsxReader {
             })?;
 
         let mut out = String::new();
-        for sheet_name in workbook.sheet_names().to_owned() {
+        for sheet_name in workbook.sheet_names().clone() {
             if let Some(Ok(range)) = workbook.worksheet_range(&sheet_name) {
                 if !out.is_empty() {
-                    out.push_str("\n");
+                    out.push('\n');
                 }
-                out.push_str(&format!("Sheet: {}\n", sheet_name));
+                out.push_str(&format!("Sheet: {sheet_name}\n"));
                 for row in range.rows() {
                     let mut first_cell = true;
                     for cell in row {
@@ -33,14 +33,14 @@ impl XlsxReader {
                         first_cell = false;
                         match cell {
                             DataType::String(s) => out.push_str(s.trim()),
-                            DataType::Float(v) => out.push_str(&format!("{}", v)),
-                            DataType::Int(v) => out.push_str(&format!("{}", v)),
+                            DataType::Float(v) => out.push_str(&format!("{v}")),
+                            DataType::Int(v) => out.push_str(&format!("{v}")),
                             DataType::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
-                            DataType::Error(e) => out.push_str(&format!("#{:?}", e)),
+                            DataType::Error(e) => out.push_str(&format!("#{e:?}")),
                             DataType::Empty => {}
-                            DataType::DateTime(v) => out.push_str(&format!("{}", v)),
+                            DataType::DateTime(v) => out.push_str(&format!("{v}")),
                             DataType::DateTimeIso(s) => out.push_str(s),
-                            DataType::Duration(v) => out.push_str(&format!("{}", v)),
+                            DataType::Duration(v) => out.push_str(&format!("{v}")),
                             DataType::DurationIso(s) => out.push_str(s),
                         }
                     }
@@ -60,14 +60,11 @@ impl DocumentReader for XlsxReader {
 
     fn supports(&self, hint: &ReaderHint<'_>) -> bool {
         matches!(hint.format, Some(DocumentFormat::Xlsx))
-            || hint
-                .mime
-                .map(|mime| {
-                    mime.eq_ignore_ascii_case(
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    )
-                })
-                .unwrap_or(false)
+            || hint.mime.is_some_and(|mime| {
+                mime.eq_ignore_ascii_case(
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            })
     }
 
     fn extract(&self, bytes: &[u8], hint: &ReaderHint<'_>) -> Result<ReaderOutput> {

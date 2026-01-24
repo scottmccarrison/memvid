@@ -20,6 +20,7 @@ pub struct TriplePattern {
 
 impl TriplePattern {
     /// Create a new triple pattern.
+    #[must_use]
     pub fn new(subject: PatternTerm, predicate: PatternTerm, object: PatternTerm) -> Self {
         Self {
             subject,
@@ -29,6 +30,7 @@ impl TriplePattern {
     }
 
     /// Create a pattern matching entity:slot = value
+    #[must_use]
     pub fn entity_slot_value(entity: &str, slot: &str, value: &str) -> Self {
         Self {
             subject: PatternTerm::Literal(entity.to_lowercase()),
@@ -38,6 +40,7 @@ impl TriplePattern {
     }
 
     /// Create a pattern matching entity:slot = ?var (any value)
+    #[must_use]
     pub fn entity_slot_any(entity: &str, slot: &str, var: &str) -> Self {
         Self {
             subject: PatternTerm::Literal(entity.to_lowercase()),
@@ -47,6 +50,7 @@ impl TriplePattern {
     }
 
     /// Create a pattern matching ?entity:slot = value (find entities with this value)
+    #[must_use]
     pub fn any_slot_value(var: &str, slot: &str, value: &str) -> Self {
         Self {
             subject: PatternTerm::Variable(var.to_string()),
@@ -248,6 +252,7 @@ pub struct GraphMatchResult {
 
 impl GraphMatchResult {
     /// Create a new match result.
+    #[must_use]
     pub fn new(entity: String, frame_ids: Vec<FrameId>, confidence: f32) -> Self {
         Self {
             entity,

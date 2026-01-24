@@ -54,7 +54,7 @@ pub(crate) fn build_timeline(
         // Also include ExtractedImage frames (child frames) which may not be in time index
         let indexed_ids: std::collections::HashSet<FrameId> =
             indexed.iter().map(|e| e.frame_id).collect();
-        for frame in memvid.toc.frames.iter() {
+        for frame in &memvid.toc.frames {
             if frame.status == FrameStatus::Active
                 && frame.role == FrameRole::ExtractedImage
                 && !indexed_ids.contains(&frame.id)
@@ -79,8 +79,8 @@ pub(crate) fn build_timeline(
     }
 
     entries.retain(|entry| {
-        let after_since = since.map_or(true, |s| entry.timestamp >= s);
-        let before_until = until.map_or(true, |u| entry.timestamp <= u);
+        let after_since = since.is_none_or(|s| entry.timestamp >= s);
+        let before_until = until.is_none_or(|u| entry.timestamp <= u);
         after_since && before_until
     });
 
@@ -88,7 +88,9 @@ pub(crate) fn build_timeline(
         entries.reverse();
     }
 
-    let limit = limit.map_or(entries.len(), |nz| nz.get() as usize);
+    let limit = limit.map_or(entries.len(), |nz| {
+        usize::try_from(nz.get()).unwrap_or(usize::MAX)
+    });
     let mut result = Vec::with_capacity(entries.len().min(limit));
     #[cfg(feature = "temporal_track")]
     let temporal_track_snapshot = memvid.temporal_track_ref()?.cloned();
@@ -96,7 +98,7 @@ pub(crate) fn build_timeline(
         let frame = memvid
             .toc
             .frames
-            .get(entry.frame_id as usize)
+            .get(usize::try_from(entry.frame_id).unwrap_or(usize::MAX))
             .ok_or(MemvidError::InvalidTimeIndex {
                 reason: "frame id out of range".into(),
             })?

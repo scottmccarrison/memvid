@@ -160,6 +160,7 @@ pub struct StructuredRow {
 
 impl StructuredRow {
     /// Create a new row with cells.
+    #[must_use]
     pub fn new(row: usize, cells: Vec<StructuredCell>) -> Self {
         Self {
             row,
@@ -169,12 +170,14 @@ impl StructuredRow {
     }
 
     /// Mark as header row.
+    #[must_use]
     pub fn as_header(mut self) -> Self {
         self.is_header = true;
         self
     }
 
     /// Get cell texts as a vector.
+    #[must_use]
     pub fn cell_texts(&self) -> Vec<&str> {
         self.cells.iter().map(|c| c.text.as_str()).collect()
     }
@@ -216,11 +219,13 @@ impl StructuredTable {
     }
 
     /// Get number of data rows.
+    #[must_use]
     pub fn data_row_count(&self) -> usize {
         self.rows.iter().filter(|r| !r.is_header).count()
     }
 
     /// Format headers as markdown table header.
+    #[must_use]
     pub fn format_header(&self) -> String {
         if self.headers.is_empty() {
             return String::new();
@@ -234,16 +239,18 @@ impl StructuredTable {
                 .collect::<Vec<_>>()
                 .join("|")
         );
-        format!("{}\n{}", header_row, separator)
+        format!("{header_row}\n{separator}")
     }
 
     /// Format a row as markdown.
+    #[must_use]
     pub fn format_row(&self, row: &StructuredRow) -> String {
         let cells: Vec<&str> = row.cells.iter().map(|c| c.text.as_str()).collect();
         format!("| {} |", cells.join(" | "))
     }
 
     /// Estimate character count.
+    #[must_use]
     pub fn char_count(&self) -> usize {
         self.raw_text.chars().count()
     }
@@ -278,6 +285,7 @@ impl StructuredCodeBlock {
     }
 
     /// Format as fenced code block.
+    #[must_use]
     pub fn format(&self) -> String {
         let fence = "```";
         let lang = self.language.as_deref().unwrap_or("");
@@ -285,6 +293,7 @@ impl StructuredCodeBlock {
     }
 
     /// Estimate character count.
+    #[must_use]
     pub fn char_count(&self) -> usize {
         self.content.chars().count() + 10 // fences + language
     }
@@ -308,6 +317,7 @@ fn default_start() -> usize {
 
 impl StructuredList {
     /// Create a new unordered list.
+    #[must_use]
     pub fn unordered(items: Vec<String>) -> Self {
         Self {
             ordered: false,
@@ -317,6 +327,7 @@ impl StructuredList {
     }
 
     /// Create a new ordered list.
+    #[must_use]
     pub fn ordered(items: Vec<String>) -> Self {
         Self {
             ordered: true,
@@ -326,6 +337,7 @@ impl StructuredList {
     }
 
     /// Format as markdown list.
+    #[must_use]
     pub fn format(&self) -> String {
         self.items
             .iter()
@@ -334,7 +346,7 @@ impl StructuredList {
                 if self.ordered {
                     format!("{}. {}", self.start + i, item)
                 } else {
-                    format!("- {}", item)
+                    format!("- {item}")
                 }
             })
             .collect::<Vec<_>>()
@@ -342,6 +354,7 @@ impl StructuredList {
     }
 
     /// Estimate character count.
+    #[must_use]
     pub fn char_count(&self) -> usize {
         self.items.iter().map(|s| s.chars().count() + 3).sum()
     }
@@ -366,6 +379,7 @@ impl StructuredHeading {
     }
 
     /// Format as markdown heading.
+    #[must_use]
     pub fn format(&self) -> String {
         format!("{} {}", "#".repeat(self.level as usize), self.text)
     }
@@ -419,6 +433,7 @@ impl DocumentElement {
     }
 
     /// Create a table element.
+    #[must_use]
     pub fn table(table: StructuredTable, char_start: usize, char_end: usize) -> Self {
         Self {
             element_type: ElementType::Table,
@@ -429,6 +444,7 @@ impl DocumentElement {
     }
 
     /// Create a code block element.
+    #[must_use]
     pub fn code_block(block: StructuredCodeBlock, char_start: usize, char_end: usize) -> Self {
         Self {
             element_type: ElementType::CodeBlock,
@@ -439,6 +455,7 @@ impl DocumentElement {
     }
 
     /// Create a list element.
+    #[must_use]
     pub fn list(list: StructuredList, char_start: usize, char_end: usize) -> Self {
         Self {
             element_type: ElementType::List,
@@ -449,6 +466,7 @@ impl DocumentElement {
     }
 
     /// Create a heading element.
+    #[must_use]
     pub fn heading(heading: StructuredHeading, char_start: usize, char_end: usize) -> Self {
         Self {
             element_type: ElementType::Heading,
@@ -459,6 +477,7 @@ impl DocumentElement {
     }
 
     /// Get element text content.
+    #[must_use]
     pub fn text(&self) -> String {
         match &self.data {
             ElementData::Paragraph { text } => text.clone(),
@@ -473,16 +492,19 @@ impl DocumentElement {
     }
 
     /// Get element character count.
+    #[must_use]
     pub fn char_count(&self) -> usize {
         self.char_end.saturating_sub(self.char_start)
     }
 
     /// Check if this is a table element.
+    #[must_use]
     pub fn is_table(&self) -> bool {
         self.element_type == ElementType::Table
     }
 
     /// Get table data if this is a table element.
+    #[must_use]
     pub fn as_table(&self) -> Option<&StructuredTable> {
         match &self.data {
             ElementData::Table(t) => Some(t),
@@ -518,6 +540,7 @@ pub struct StructuredDocument {
 
 impl StructuredDocument {
     /// Create a new empty structured document.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -558,6 +581,7 @@ impl StructuredDocument {
     }
 
     /// Check if document has any structure (vs plain text).
+    #[must_use]
     pub fn has_structure(&self) -> bool {
         self.table_count > 0 || self.code_block_count > 0
     }
@@ -659,6 +683,7 @@ impl StructuredChunk {
     }
 
     /// Check if this is a table-related chunk.
+    #[must_use]
     pub fn is_table(&self) -> bool {
         matches!(
             self.chunk_type,
@@ -667,11 +692,13 @@ impl StructuredChunk {
     }
 
     /// Check if this is a continuation of a split element.
+    #[must_use]
     pub fn is_continuation(&self) -> bool {
-        self.part.map_or(false, |p| p > 1)
+        self.part.is_some_and(|p| p > 1)
     }
 
     /// Get character count.
+    #[must_use]
     pub fn char_count(&self) -> usize {
         self.text.chars().count()
     }
@@ -710,7 +737,7 @@ impl Default for ChunkingOptions {
 /// Strategy for chunking tables.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TableChunkingStrategy {
-    /// Keep entire table in one chunk (may exceed max_chars)
+    /// Keep entire table in one chunk (may exceed `max_chars`)
     PreserveWhole,
     /// Split table between rows, prepend header to each chunk
     #[default]
@@ -722,7 +749,7 @@ pub enum TableChunkingStrategy {
 /// Strategy for chunking code blocks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CodeChunkingStrategy {
-    /// Keep entire code block in one chunk (may exceed max_chars)
+    /// Keep entire code block in one chunk (may exceed `max_chars`)
     #[default]
     PreserveWhole,
     /// Split at function/block boundaries (if detectable)
@@ -748,11 +775,13 @@ pub struct ChunkingResult {
 
 impl ChunkingResult {
     /// Create empty result.
+    #[must_use]
     pub fn empty() -> Self {
         Self::default()
     }
 
     /// Total chunks produced.
+    #[must_use]
     pub fn chunk_count(&self) -> usize {
         self.chunks.len()
     }

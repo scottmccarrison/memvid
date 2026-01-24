@@ -9,6 +9,7 @@ fn vec_config() -> impl bincode::config::Config {
         .with_little_endian()
 }
 
+#[allow(clippy::cast_possible_truncation)]
 const VEC_DECODE_LIMIT: usize = crate::MAX_INDEX_BYTES as usize;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,6 +24,7 @@ pub struct VecIndexBuilder {
 }
 
 impl VecIndexBuilder {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -44,8 +46,7 @@ impl VecIndexBuilder {
         let dimension = self
             .documents
             .first()
-            .map(|doc| doc.embedding.len() as u32)
-            .unwrap_or(0);
+            .map_or(0, |doc| u32::try_from(doc.embedding.len()).unwrap_or(0));
         #[cfg(feature = "parallel_segments")]
         let bytes_uncompressed = self
             .documents
@@ -89,7 +90,7 @@ impl VecIndex {
     /// Decode vector index with compression mode from manifest
     ///
     /// ALWAYS tries uncompressed format first, regardless of compression flag.
-    /// This is necessary because MIN_VECTORS_FOR_PQ threshold (100 vectors)
+    /// This is necessary because `MIN_VECTORS_FOR_PQ` threshold (100 vectors)
     /// causes most segments to be stored as uncompressed even when Pq96 is requested.
     /// Falls back to PQ format for true compressed segments.
     pub fn decode_with_compression(
@@ -149,6 +150,7 @@ impl VecIndex {
         }
     }
 
+    #[must_use]
     pub fn search(&self, query: &[f32], limit: usize) -> Vec<VecSearchHit> {
         if query.is_empty() {
             return Vec::new();
@@ -177,6 +179,7 @@ impl VecIndex {
         }
     }
 
+    #[must_use]
     pub fn entries(&self) -> Box<dyn Iterator<Item = (FrameId, &[f32])> + '_> {
         match self {
             VecIndex::Uncompressed { documents } => Box::new(
@@ -191,6 +194,7 @@ impl VecIndex {
         }
     }
 
+    #[must_use]
     pub fn embedding_for(&self, frame_id: FrameId) -> Option<&[f32]> {
         match self {
             VecIndex::Uncompressed { documents } => documents
@@ -223,11 +227,7 @@ pub struct VecSearchHit {
 }
 
 fn l2_distance(a: &[f32], b: &[f32]) -> f32 {
-    a.iter()
-        .zip(b.iter())
-        .map(|(x, y)| (x - y).powi(2))
-        .sum::<f32>()
-        .sqrt()
+    crate::simd::l2_distance_simd(a, b)
 }
 
 #[cfg(test)]

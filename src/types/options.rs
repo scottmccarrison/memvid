@@ -38,7 +38,7 @@ pub struct PutOptions {
     pub auto_tag: bool,
     #[serde(default = "default_true")]
     pub extract_dates: bool,
-    /// Extract triplets (Subject-Predicate-Object) from text and store as MemoryCards.
+    /// Extract triplets (Subject-Predicate-Object) from text and store as `MemoryCards`.
     /// Enabled by default. Triplets enable O(1) entity lookups and graph queries.
     #[serde(default = "default_true")]
     pub extract_triplets: bool,
@@ -62,11 +62,11 @@ pub struct PutOptions {
     /// Enable instant indexing for immediate searchability (<1s).
     /// When enabled, performs a soft Tantivy commit after WAL append.
     /// Frame becomes searchable immediately but full enrichment happens in background.
-    /// Default: true for single-doc put(), false for put_many() batch.
+    /// Default: true for single-doc `put()`, false for `put_many()` batch.
     #[serde(default = "default_true")]
     pub instant_index: bool,
     /// Time budget for text extraction in milliseconds.
-    /// When instant_index is enabled, extraction stops after this time.
+    /// When `instant_index` is enabled, extraction stops after this time.
     /// 0 means no budget (extract everything).
     /// Default: 350ms (optimized for sub-second total ingestion).
     #[serde(default = "default_extraction_budget_ms")]
@@ -107,25 +107,19 @@ impl Default for PutOptions {
 
 impl PutOptions {
     /// Start a fluent builder for `PutOptions`.
+    #[must_use]
     pub fn builder() -> PutOptionsBuilder {
         PutOptionsBuilder::default()
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PutOptionsBuilder {
     inner: PutOptions,
 }
 
-impl Default for PutOptionsBuilder {
-    fn default() -> Self {
-        Self {
-            inner: PutOptions::default(),
-        }
-    }
-}
-
 impl PutOptionsBuilder {
+    #[must_use]
     pub fn timestamp(mut self, timestamp: i64) -> Self {
         self.inner.timestamp = Some(timestamp);
         self
@@ -156,6 +150,7 @@ impl PutOptionsBuilder {
         self
     }
 
+    #[must_use]
     pub fn metadata(mut self, metadata: DocMetadata) -> Self {
         self.inner.metadata = Some(metadata);
         self
@@ -186,37 +181,44 @@ impl PutOptionsBuilder {
         self
     }
 
+    #[must_use]
     pub fn enable_embedding(mut self, enable: bool) -> Self {
         self.inner.enable_embedding = enable;
         self
     }
 
+    #[must_use]
     pub fn auto_tag(mut self, enabled: bool) -> Self {
         self.inner.auto_tag = enabled;
         self
     }
 
+    #[must_use]
     pub fn extract_dates(mut self, enabled: bool) -> Self {
         self.inner.extract_dates = enabled;
         self
     }
 
+    #[must_use]
     pub fn extract_triplets(mut self, enabled: bool) -> Self {
         self.inner.extract_triplets = enabled;
         self
     }
 
+    #[must_use]
     pub fn parent_id(mut self, parent_id: FrameId) -> Self {
         self.inner.parent_id = Some(parent_id);
         self
     }
 
+    #[must_use]
     pub fn role(mut self, role: FrameRole) -> Self {
         self.inner.role = role;
         self
     }
 
     /// Don't store raw binary content, only extracted text + SHA256 hash.
+    #[must_use]
     pub fn no_raw(mut self, enabled: bool) -> Self {
         self.inner.no_raw = enabled;
         self
@@ -229,6 +231,7 @@ impl PutOptionsBuilder {
     }
 
     /// Skip ingestion if a frame with matching BLAKE3 hash already exists.
+    #[must_use]
     pub fn dedup(mut self, enabled: bool) -> Self {
         self.inner.dedup = enabled;
         self
@@ -236,6 +239,7 @@ impl PutOptionsBuilder {
 
     /// Enable instant indexing for immediate searchability.
     /// When disabled, full commit is deferred (faster for batches).
+    #[must_use]
     pub fn instant_index(mut self, enabled: bool) -> Self {
         self.inner.instant_index = enabled;
         self
@@ -243,11 +247,13 @@ impl PutOptionsBuilder {
 
     /// Set extraction time budget in milliseconds.
     /// 0 means no budget (extract everything, slower but complete).
+    #[must_use]
     pub fn extraction_budget_ms(mut self, ms: u64) -> Self {
         self.inner.extraction_budget_ms = ms;
         self
     }
 
+    #[must_use]
     pub fn build(self) -> PutOptions {
         self.inner
     }
@@ -299,9 +305,9 @@ pub struct PutRequest {
 ///
 /// # Performance vs Safety
 ///
-/// **Fast Mode** (for bulk import): Use compression_level=1, disable_auto_checkpoint=true, skip_sync=false
+/// **Fast Mode** (for bulk import): Use `compression_level=1`, `disable_auto_checkpoint=true`, `skip_sync=false`
 ///
-/// **Ultra-Fast Mode** (NOT crash-safe!): Use compression_level=1, disable_auto_checkpoint=true, skip_sync=true
+/// **Ultra-Fast Mode** (NOT crash-safe!): Use `compression_level=1`, `disable_auto_checkpoint=true`, `skip_sync=true`
 #[derive(Debug, Clone)]
 pub struct PutManyOpts {
     /// Compression level for text content

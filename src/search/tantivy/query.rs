@@ -1,3 +1,5 @@
+// Safe unwrap: single-element vector pop after length check.
+#![allow(clippy::unwrap_used)]
 use std::ops::Bound;
 
 use super::engine::TantivyEngine;
@@ -25,7 +27,7 @@ struct QueryPlanner<'a> {
     engine: &'a TantivyEngine,
 }
 
-impl<'a> QueryPlanner<'a> {
+impl QueryPlanner<'_> {
     fn build_root_query(
         &self,
         parsed: &ParsedQuery,
@@ -156,18 +158,12 @@ impl<'a> QueryPlanner<'a> {
                 )))
             }
             FieldTerm::DateRange(range) => {
-                let lower = range
-                    .start
-                    .map(|value| {
-                        Bound::Included(Term::from_field_i64(self.engine.timestamp, value))
-                    })
-                    .unwrap_or(Bound::Unbounded);
-                let upper = range
-                    .end
-                    .map(|value| {
-                        Bound::Included(Term::from_field_i64(self.engine.timestamp, value))
-                    })
-                    .unwrap_or(Bound::Unbounded);
+                let lower = range.start.map_or(Bound::Unbounded, |value| {
+                    Bound::Included(Term::from_field_i64(self.engine.timestamp, value))
+                });
+                let upper = range.end.map_or(Bound::Unbounded, |value| {
+                    Bound::Included(Term::from_field_i64(self.engine.timestamp, value))
+                });
                 Ok(Box::new(RangeQuery::new(lower, upper)))
             }
         }

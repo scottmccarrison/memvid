@@ -1,3 +1,5 @@
+// Safe unwrap: float comparisons with fallback ordering.
+#![allow(clippy::unwrap_used)]
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::num::NonZeroU64;
@@ -30,7 +32,7 @@ impl Memvid {
         let lexical_query = sanitize_question_for_lexical(&request.question);
         let primary_tokens: Vec<String> = lexical_query
             .split_whitespace()
-            .map(|token| token.to_ascii_lowercase())
+            .map(str::to_ascii_lowercase)
             .collect();
 
         // Detect aggregation questions that need multi-session retrieval
@@ -500,12 +502,17 @@ impl Memvid {
             .map(|manifest| manifest.dimension)
             .filter(|dim| *dim > 0)
             .or_else(|| {
-                self.vec_index
-                    .as_ref()
-                    .and_then(|index| index.entries().next().map(|(_, emb)| emb.len() as u32))
+                self.vec_index.as_ref().and_then(|index| {
+                    index
+                        .entries()
+                        .next()
+                        .map(|(_, emb)| u32::try_from(emb.len()).unwrap_or(0))
+                })
             })
             .unwrap_or(0);
-        if stored_dimension > 0 && query_embedding.len() as u32 != stored_dimension {
+        if stored_dimension > 0
+            && u32::try_from(query_embedding.len()).unwrap_or(u32::MAX) != stored_dimension
+        {
             return Err(MemvidError::VecDimensionMismatch {
                 expected: stored_dimension,
                 actual: query_embedding.len(),
@@ -516,7 +523,7 @@ impl Memvid {
         for hit in hits.iter() {
             if let Some(embedding) = self.frame_embedding(hit.frame_id)? {
                 if expected_dimension == 0 || embedding.len() == expected_dimension {
-                    let score = cosine_similarity(&query_embedding, &embedding);
+                    let score = cosine_similarity(query_embedding, &embedding);
                     semantic_scores.insert(hit.frame_id, score);
                 }
             }
@@ -530,7 +537,7 @@ impl Memvid {
         Ok(true)
     }
 
-    /// Build a fallback SearchResponse from timeline entries when search returns no hits.
+    /// Build a fallback `SearchResponse` from timeline entries when search returns no hits.
     /// This gives the LLM some context to work with for general questions about the document.
     /// For comprehensive coverage, includes child frames (e.g., document pages) as well.
     fn build_timeline_fallback_response(
@@ -564,7 +571,7 @@ impl Memvid {
         // Collect all frame IDs including child frames for comprehensive coverage
         // This is critical for analytical questions that need full document context
         let mut all_frame_ids: Vec<(u64, Option<String>)> = Vec::new();
-        for entry in entries.iter() {
+        for entry in &entries {
             // Add parent frame
             all_frame_ids.push((entry.frame_id, entry.uri.clone()));
             // Add all child frames (e.g., document pages)
@@ -592,7 +599,7 @@ impl Memvid {
                         .uri
                         .clone()
                         .or_else(|| parent_uri.clone())
-                        .unwrap_or_else(|| format!("mv2://frame/{}", frame_id));
+                        .unwrap_or_else(|| format!("mv2://frame/{frame_id}"));
                     (content, uri)
                 }
                 Err(_) => continue, // Skip frames we can't read
@@ -716,8 +723,7 @@ fn reorder_hits_with_semantic_scores(
                     let lexical_rrf = 1.0 / (RRF_K + lexical_rank as f32);
                     let semantic_rrf = semantic_rank
                         .get(&hit.frame_id)
-                        .map(|rank| 1.0 / (RRF_K + *rank as f32))
-                        .unwrap_or(0.0);
+                        .map_or(0.0, |rank| 1.0 / (RRF_K + *rank as f32));
                     semantic_score + lexical_rrf + semantic_rrf
                 }
                 AskMode::Lex => 1.0 / (RRF_K + lexical_rank as f32),
@@ -818,7 +824,7 @@ fn lexical_fallback_query(question: &str) -> Option<String> {
 
     let sanitized_tokens: Vec<String> = sanitized_full
         .split_whitespace()
-        .map(|token| token.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
 
     let mut candidates: Vec<String> = question
@@ -867,7 +873,7 @@ fn is_stopword(token: &str) -> bool {
         "was", "we", "were", "what", "when", "where", "which", "who", "whom", "why", "with", "you",
         "your", "yours",
     ];
-    STOPWORDS.iter().any(|stop| *stop == token)
+    STOPWORDS.contains(&token)
 }
 
 fn sanitize_question_for_lexical(question: &str) -> String {
@@ -944,7 +950,7 @@ fn build_expanded_queries(tokens: &[String]) -> Vec<String> {
     let key_nouns: Vec<&str> = tokens
         .iter()
         .filter(|t| !is_stopword(t) && t.len() > 3)
-        .map(|t| t.as_str())
+        .map(std::string::String::as_str)
         .collect();
 
     if key_nouns.is_empty() {
@@ -954,7 +960,7 @@ fn build_expanded_queries(tokens: &[String]) -> Vec<String> {
     // For each key noun, try singular/plural and possessive forms
     for noun in &key_nouns {
         // Try the base form
-        variants.push(noun.to_string());
+        variants.push((*noun).to_string());
 
         // Try singular/plural variants
         if noun.ends_with('s') && noun.len() > 4 {
@@ -963,16 +969,16 @@ fn build_expanded_queries(tokens: &[String]) -> Vec<String> {
             variants.push(singular.to_string());
         } else if !noun.ends_with('s') {
             // "wedding" -> "weddings"
-            variants.push(format!("{}s", noun));
+            variants.push(format!("{noun}s"));
         }
     }
 
     // Create OR queries from the variants
-    if !variants.is_empty() {
+    if variants.is_empty() {
+        Vec::new()
+    } else {
         let or_query = variants.join(" OR ");
         vec![or_query]
-    } else {
-        Vec::new()
     }
 }
 
@@ -1094,7 +1100,7 @@ fn is_recency_question(question: &str) -> bool {
         "up to date",
     ];
 
-    for pattern in multi_word_patterns.iter() {
+    for pattern in &multi_word_patterns {
         if lower.contains(pattern) {
             return true;
         }
@@ -1113,8 +1119,8 @@ fn is_recency_question(question: &str) -> bool {
 
     // Split into words and check for exact matches
     let words: Vec<&str> = lower.split(|c: char| !c.is_alphanumeric()).collect();
-    for pattern in single_word_patterns.iter() {
-        if words.iter().any(|w| *w == *pattern) {
+    for pattern in &single_word_patterns {
+        if words.contains(pattern) {
             return true;
         }
     }
@@ -1178,7 +1184,7 @@ fn build_analytical_query(tokens: &[String]) -> String {
     // Keep only content-bearing terms
     let content_terms: Vec<&str> = tokens
         .iter()
-        .map(|t| t.as_str())
+        .map(std::string::String::as_str)
         .filter(|t| !analytical_stopwords.contains(*t) && t.len() > 2)
         .collect();
 
@@ -1231,7 +1237,7 @@ fn is_analytical_question(question: &str) -> bool {
         "any differences",
     ];
 
-    for pattern in analytical_patterns.iter() {
+    for pattern in &analytical_patterns {
         if lower.contains(pattern) {
             return true;
         }
@@ -1470,7 +1476,7 @@ fn promote_corrections(memvid: &mut Memvid, hits: &mut Vec<SearchHit>) -> Result
 }
 
 /// Promote earliest/latest hits into the visible context so update/recency questions see both ends.
-/// Uses content_dates for temporal ordering (dates extracted from document content),
+/// Uses `content_dates` for temporal ordering (dates extracted from document content),
 /// falling back to frame.timestamp (ingestion time) if no content dates are available.
 fn promote_temporal_extremes(
     memvid: &mut Memvid,

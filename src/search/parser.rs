@@ -1,3 +1,5 @@
+// Safe unwrap/expect: regex patterns from validated input strings.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 use crate::error::MemvidError;
 use regex::Regex;
 use std::convert::TryFrom;
@@ -284,14 +286,14 @@ impl Parser {
             if self.check(TokenKind::Or) || self.check(TokenKind::RParen) || self.is_end() {
                 break;
             }
-            // Implicit word separation (no explicit AND/OR) defaults to OR for better recall
+            // Implicit word separation (no explicit AND/OR) defaults to AND for precision
             let rhs = self.parse_factor()?;
             expr = match expr {
-                Expr::Or(mut list) => {
+                Expr::And(mut list) => {
                     list.push(rhs);
-                    Expr::Or(list)
+                    Expr::And(list)
                 }
-                _ => Expr::Or(vec![expr, rhs]),
+                _ => Expr::And(vec![expr, rhs]),
             };
         }
         Ok(expr)
@@ -410,7 +412,7 @@ impl TextTerm {
         // (i.e., "mach?ne" or "mach*" are wildcards, but "machine?" is just "machine")
         if cleaned.contains('*') || cleaned.contains('?') {
             TextTerm::Wildcard(WildcardPattern::new(cleaned.to_string()))
-        } else if cleaned.is_empty() || !cleaned.chars().any(|c| c.is_alphanumeric()) {
+        } else if cleaned.is_empty() || !cleaned.chars().any(char::is_alphanumeric) {
             // If the word has no alphanumeric chars, treat as empty
             // (e.g., "-", "---", ":", etc. won't produce tokens anyway)
             TextTerm::Word(String::new())
@@ -514,7 +516,7 @@ impl WildcardPattern {
             .next()
             .map(|segment| segment.split('?').next().unwrap_or(""))
             .filter(|seed| !seed.is_empty())
-            .map(|seed| seed.to_string())
+            .map(std::string::ToString::to_string)
     }
 }
 
@@ -596,6 +598,129 @@ mod tests {
         match TextTerm::from_word("test-word".to_string()) {
             TextTerm::Word(w) => assert_eq!(w, "test-word"),
             _ => panic!("expected Word variant"),
+        }
+    }
+
+    // Tests for implicit AND operator behavior
+    // These tests verify the fix that changes implicit multi-word queries
+    // from OR to AND for better precision
+    #[test]
+    fn implicit_and_behavior() {
+        let result = parse_query("machine learning").expect("parse");
+        match result.expr {
+            Expr::And(children) => {
+                assert_eq!(children.len(), 2, "Should have 2 AND terms");
+            }
+            _ => panic!("Expected Expr::And, got {:?}", result.expr),
+        }
+    }
+
+    #[test]
+    fn implicit_and_three_words() {
+        let result = parse_query("machine learning python").expect("parse");
+        match result.expr {
+            Expr::And(children) => {
+                assert_eq!(children.len(), 3, "Should have 3 AND terms");
+            }
+            _ => panic!("Expected Expr::And with 3 children"),
+        }
+    }
+
+    #[test]
+    fn explicit_or_still_works() {
+        let result = parse_query("machine OR learning").expect("parse");
+        match result.expr {
+            Expr::Or(children) => {
+                assert_eq!(children.len(), 2, "Should have 2 OR terms");
+            }
+            _ => panic!("Expected Expr::Or"),
+        }
+    }
+
+    #[test]
+    fn explicit_and_still_works() {
+        let result = parse_query("machine AND learning").expect("parse");
+        match result.expr {
+            Expr::And(children) => {
+                assert_eq!(children.len(), 2, "Should have 2 AND terms");
+            }
+            _ => panic!("Expected Expr::And"),
+        }
+    }
+
+    #[test]
+    fn mixed_explicit_and_implicit() {
+        let result = parse_query("machine learning OR python").expect("parse");
+        match result.expr {
+            Expr::Or(children) => {
+                assert_eq!(children.len(), 2, "Should have 2 OR branches");
+                match &children[0] {
+                    Expr::And(and_children) => {
+                        assert_eq!(
+                            and_children.len(),
+                            2,
+                            "First branch should have 2 AND terms"
+                        );
+                    }
+                    _ => panic!("First OR branch should be AND"),
+                }
+            }
+            _ => panic!("Expected Expr::Or at top level"),
+        }
+    }
+
+    #[test]
+    fn phrase_and_word_implicit_and() {
+        let result = parse_query("\"machine learning\" python").expect("parse");
+        match result.expr {
+            Expr::And(children) => {
+                assert_eq!(children.len(), 2, "Should have 2 AND terms");
+            }
+            _ => panic!("Expected Expr::And"),
+        }
+    }
+
+    #[test]
+    fn field_and_word_implicit_and() {
+        let result = parse_query("tag:important urgent").expect("parse");
+        match result.expr {
+            Expr::And(children) => {
+                assert_eq!(children.len(), 2, "Should have 2 AND terms");
+            }
+            _ => panic!("Expected Expr::And"),
+        }
+    }
+
+    #[test]
+    fn parentheses_preserve_implicit_and() {
+        // (machine learning) python actually flattens to And([machine, learning, python])
+        // This is correct optimizer behavior
+        let result = parse_query("(machine learning) python").expect("parse");
+        match result.expr {
+            Expr::And(children) => {
+                // The parser flattens nested ANDs for efficiency
+                assert_eq!(children.len(), 3, "Should have 3 AND terms (flattened)");
+            }
+            _ => panic!("Expected Expr::And"),
+        }
+    }
+
+    #[test]
+    fn parentheses_with_different_operators() {
+        // Test that parentheses work when needed: (machine OR learning) AND python
+        let result = parse_query("(machine OR learning) python").expect("parse");
+        match result.expr {
+            Expr::And(children) => {
+                assert_eq!(children.len(), 2, "Should have 2 AND terms");
+                // First child is OR expression
+                match &children[0] {
+                    Expr::Or(or_children) => {
+                        assert_eq!(or_children.len(), 2, "OR should have 2 terms");
+                    }
+                    _ => panic!("First child should be OR"),
+                }
+            }
+            _ => panic!("Expected Expr::And at top level"),
         }
     }
 }

@@ -91,7 +91,7 @@ pub fn find_last_valid_footer(bytes: &[u8]) -> Option<FooterSlice<'_>> {
         let candidate = &bytes[pos..pos + FOOTER_SIZE];
         if let Some(footer) = CommitFooter::decode(candidate) {
             let toc_end = pos;
-            let toc_len = footer.toc_len as usize;
+            let toc_len = usize::try_from(footer.toc_len).unwrap_or(0);
             if toc_len == 0 || toc_len > toc_end {
                 search_end = pos;
                 continue;

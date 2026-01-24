@@ -52,9 +52,9 @@ fn create_handles_existing_file() {
     // Create second time - this tests current behavior
     // (Either it fails OR it creates a new file - both are valid implementations)
     let result = Memvid::create(&path);
-    if result.is_ok() {
+    if let Ok(mut mem) = result {
         // If create succeeds, the old data should be gone (new file)
-        let mut mem = result.unwrap();
+        // let mut mem = result.unwrap();
         mem.commit().unwrap();
         // Reopen and verify it's empty (new file was created)
         let mem = Memvid::open_read_only(&path).unwrap();

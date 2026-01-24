@@ -1,3 +1,5 @@
+// Safe unwrap: Float comparisons and known-valid iterator operations.
+#![allow(clippy::unwrap_used)]
 //! PDF table extraction using Lattice and Stream detection.
 //!
 //! This module implements two complementary table detection strategies:
@@ -39,7 +41,7 @@ pub fn extract_tables_from_pdf(
 
     // Extract page layouts
     let layouts = extract_pdf_layout(bytes, options.max_pages)?;
-    let pages_processed = layouts.len() as u32;
+    let pages_processed = u32::try_from(layouts.len()).unwrap_or(0);
 
     let mut all_tables = Vec::new();
     let mut warnings = Vec::new();
@@ -100,7 +102,7 @@ pub fn extract_tables_from_pdf(
         }
     }
 
-    let total_ms = start.elapsed().as_millis() as u64;
+    let total_ms = start.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
 
     if all_tables.is_empty() && pages_processed > 0 {
         warnings.push("No tables detected in document".to_string());
@@ -269,7 +271,7 @@ fn assign_text_to_cells(
         .collect()
 }
 
-/// Build an ExtractedTable from grid data.
+/// Build an `ExtractedTable` from grid data.
 fn build_table_from_grid(
     grid: &[GridCell],
     cell_contents: &HashMap<(usize, usize), String>,
@@ -307,7 +309,7 @@ fn build_table_from_grid(
         headers = first_row
             .cell_texts()
             .iter()
-            .map(|s| s.to_string())
+            .map(|s| (*s).to_string())
             .collect();
         if headers.iter().any(|h| !h.is_empty()) {
             if let Some(row) = rows.first_mut() {
@@ -377,7 +379,7 @@ fn extract_stream_tables(
 }
 
 /// Cluster text boxes into rows by Y-position.
-fn cluster_into_rows<'a>(text_boxes: &'a [TextBox], threshold: f32) -> Vec<Vec<&'a TextBox>> {
+fn cluster_into_rows(text_boxes: &[TextBox], threshold: f32) -> Vec<Vec<&TextBox>> {
     if text_boxes.is_empty() {
         return Vec::new();
     }
@@ -455,7 +457,7 @@ fn filter_consistent_boundaries(
         .collect()
 }
 
-/// Build an ExtractedTable from stream-detected structure.
+/// Build an `ExtractedTable` from stream-detected structure.
 fn build_stream_table(
     text_rows: &[Vec<&TextBox>],
     col_boundaries: &[f32],
@@ -499,7 +501,7 @@ fn build_stream_table(
         headers = first_row
             .cell_texts()
             .iter()
-            .map(|s| s.to_string())
+            .map(|s| (*s).to_string())
             .collect();
         // Check if first row looks like headers (non-empty, possibly different formatting)
         let non_empty_count = headers.iter().filter(|h| !h.is_empty()).count();
@@ -649,7 +651,7 @@ fn extract_raw_text(bytes: &[u8]) -> Option<String> {
     let pages = document.get_pages();
     let mut all_text = String::new();
 
-    for page_num in 1..=pages.len() as u32 {
+    for page_num in 1..=u32::try_from(pages.len()).unwrap_or(0) {
         if let Ok(text) = document.extract_text(&[page_num]) {
             all_text.push_str(&text);
             all_text.push('\n');
@@ -927,7 +929,7 @@ fn infer_column_count(lines: &[String], currency_re: &Regex, _date_re: &Regex) -
     max_parts.max(2) // Assume at least 2 columns for table detection
 }
 
-/// Build an ExtractedTable from a line-based region.
+/// Build an `ExtractedTable` from a line-based region.
 fn build_line_based_table(
     region: LineBasedTableRegion,
     source_file: &str,

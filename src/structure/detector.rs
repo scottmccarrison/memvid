@@ -1,3 +1,5 @@
+// Safe unwrap/expect usage: regex patterns are compile-time constants.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 //! Structure detection for markdown and text documents.
 //!
 //! This module detects structural elements in text, including:
@@ -57,6 +59,7 @@ impl Patterns {
 }
 
 /// Detect structure in text and produce a `StructuredDocument`.
+#[must_use]
 pub fn detect_structure(text: &str) -> StructuredDocument {
     let mut doc = StructuredDocument::from_text(text);
     let patterns = Patterns::get();
@@ -318,14 +321,14 @@ fn try_detect_list(
 
     // Check for unordered list
     if let Some(caps) = patterns.unordered_list.captures(first_line) {
-        let indent = caps.get(1).map(|m| m.as_str().len()).unwrap_or(0);
+        let indent = caps.get(1).map_or(0, |m| m.as_str().len());
         let mut items: Vec<String> = vec![caps.get(2)?.as_str().to_string()];
         let mut consumed = 1;
 
         // Collect consecutive list items at same indentation
         for i in (start + 1)..lines.len() {
             if let Some(item_caps) = patterns.unordered_list.captures(lines[i]) {
-                let item_indent = item_caps.get(1).map(|m| m.as_str().len()).unwrap_or(0);
+                let item_indent = item_caps.get(1).map_or(0, |m| m.as_str().len());
                 if item_indent == indent {
                     items.push(item_caps.get(2).unwrap().as_str().to_string());
                     consumed += 1;
@@ -348,7 +351,7 @@ fn try_detect_list(
 
     // Check for ordered list
     if let Some(caps) = patterns.ordered_list.captures(first_line) {
-        let indent = caps.get(1).map(|m| m.as_str().len()).unwrap_or(0);
+        let indent = caps.get(1).map_or(0, |m| m.as_str().len());
         let start_num: usize = caps.get(2)?.as_str().parse().unwrap_or(1);
         let mut items: Vec<String> = vec![caps.get(3)?.as_str().to_string()];
         let mut consumed = 1;
@@ -356,7 +359,7 @@ fn try_detect_list(
         // Collect consecutive list items at same indentation
         for i in (start + 1)..lines.len() {
             if let Some(item_caps) = patterns.ordered_list.captures(lines[i]) {
-                let item_indent = item_caps.get(1).map(|m| m.as_str().len()).unwrap_or(0);
+                let item_indent = item_caps.get(1).map_or(0, |m| m.as_str().len());
                 if item_indent == indent {
                     items.push(item_caps.get(3).unwrap().as_str().to_string());
                     consumed += 1;
@@ -387,7 +390,8 @@ fn try_detect_heading(
     patterns: &Patterns,
 ) -> Option<DocumentElement> {
     let caps = patterns.heading.captures(line)?;
-    let level = caps.get(1)?.as_str().len() as u8;
+    // Safe: markdown headers are ### (max few chars).
+    let level = u8::try_from(caps.get(1)?.as_str().len()).unwrap_or(0);
     let text = caps.get(2)?.as_str().to_string();
     let char_end = char_start + line.len();
 
@@ -409,6 +413,7 @@ fn try_detect_heading(
 ///
 /// This function attempts to detect such patterns by analyzing
 /// column alignment.
+#[must_use]
 pub fn detect_ascii_tables(text: &str) -> Vec<(usize, usize, StructuredTable)> {
     let mut tables = Vec::new();
     let lines: Vec<&str> = text.lines().collect();
@@ -588,14 +593,14 @@ mod tests {
 
     #[test]
     fn test_detect_markdown_table() {
-        let text = r#"Some text before.
+        let text = r"Some text before.
 
 | Name | Age | City |
 |------|-----|------|
 | Alice | 30 | NYC |
 | Bob | 25 | LA |
 
-Some text after."#;
+Some text after.";
 
         let doc = detect_structure(text);
         assert_eq!(doc.table_count, 1);
@@ -637,7 +642,7 @@ And more text."#;
 
     #[test]
     fn test_detect_lists() {
-        let text = r#"Shopping list:
+        let text = r"Shopping list:
 
 - Apples
 - Bananas
@@ -647,7 +652,7 @@ Steps:
 
 1. First step
 2. Second step
-3. Third step"#;
+3. Third step";
 
         let doc = detect_structure(text);
 
@@ -662,7 +667,7 @@ Steps:
 
     #[test]
     fn test_detect_headings() {
-        let text = r#"# Main Title
+        let text = r"# Main Title
 
 Some intro text.
 
@@ -672,7 +677,7 @@ Content here.
 
 ### Subsection
 
-More content."#;
+More content.";
 
         let doc = detect_structure(text);
 
@@ -692,7 +697,7 @@ More content."#;
 
     #[test]
     fn test_complex_document() {
-        let text = r#"# Report
+        let text = r"# Report
 
 ## Summary
 
@@ -720,7 +725,7 @@ def calculate_growth(current, previous):
 
 ## Conclusion
 
-Strong performance overall."#;
+Strong performance overall.";
 
         let doc = detect_structure(text);
 
@@ -768,10 +773,10 @@ Strong performance overall."#;
 
     #[test]
     fn test_ascii_table_detection() {
-        let text = r#"Name          Age    City
+        let text = r"Name          Age    City
 Alice         30     NYC
 Bob           25     LA
-Charlie       35     SF"#;
+Charlie       35     SF";
 
         let tables = detect_ascii_tables(text);
         assert_eq!(tables.len(), 1);

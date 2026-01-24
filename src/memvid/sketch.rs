@@ -1,7 +1,7 @@
 //! Sketch track extensions for `Memvid`.
 //!
 //! This module provides methods for fast candidate generation using
-//! per-frame sketches (SimHash + term filters). Sketches enable sub-millisecond
+//! per-frame sketches (`SimHash` + term filters). Sketches enable sub-millisecond
 //! candidate filtering before expensive BM25/vector reranking.
 //!
 //! Key operations:
@@ -23,7 +23,7 @@ pub struct SketchCandidate {
     pub frame_id: FrameId,
     /// Sketch score (higher is better, 0.0-1.0).
     pub score: f32,
-    /// Hamming distance from query SimHash.
+    /// Hamming distance from query `SimHash`.
     pub hamming_distance: u32,
     /// Number of matching top terms.
     pub matching_top_terms: usize,
@@ -57,7 +57,7 @@ pub struct SketchSearchStats {
     pub frames_scanned: usize,
     /// Frames passing term filter.
     pub term_filter_hits: usize,
-    /// Frames passing SimHash threshold.
+    /// Frames passing `SimHash` threshold.
     pub simhash_hits: usize,
     /// Final candidates returned.
     pub candidates_returned: usize,
@@ -94,7 +94,7 @@ impl Memvid {
     ///
     /// # Arguments
     /// * `frame_id` - The frame ID to create a sketch for
-    /// * `text` - The text content to sketch (search_text or payload)
+    /// * `text` - The text content to sketch (`search_text` or payload)
     /// * `variant` - The sketch variant to use (Small recommended)
     ///
     /// # Returns
@@ -114,7 +114,7 @@ impl Memvid {
     /// Build sketches for all frames that don't have one yet.
     ///
     /// This scans all active frames and generates sketches using each frame's
-    /// search_text field.
+    /// `search_text` field.
     ///
     /// # Arguments
     /// * `variant` - The sketch variant to use for new sketches
@@ -155,7 +155,7 @@ impl Memvid {
     ///
     /// This performs a fast two-stage filter:
     /// 1. Term filter: reject frames that can't possibly contain query terms
-    /// 2. SimHash: reject frames with large Hamming distance from query
+    /// 2. `SimHash`: reject frames with large Hamming distance from query
     ///
     /// Candidates should be reranked with BM25 or vector similarity for final results.
     ///
@@ -189,12 +189,10 @@ impl Memvid {
             .filter(|(_, score)| *score >= opts.min_score)
             .map(|(frame_id, score)| {
                 let entry = self.sketch_track.get(frame_id);
-                let hamming_distance = entry
-                    .map(|e| e.hamming_distance(query_sketch.simhash))
-                    .unwrap_or(64);
-                let matching_top_terms = entry
-                    .map(|e| e.count_matching_top_terms(&query_sketch.top_terms))
-                    .unwrap_or(0);
+                let hamming_distance =
+                    entry.map_or(64, |e| e.hamming_distance(query_sketch.simhash));
+                let matching_top_terms =
+                    entry.map_or(0, |e| e.count_matching_top_terms(&query_sketch.top_terms));
 
                 SketchCandidate {
                     frame_id,
@@ -257,12 +255,10 @@ impl Memvid {
             .into_iter()
             .map(|(frame_id, score)| {
                 let entry = self.sketch_track.get(frame_id);
-                let hamming_distance = entry
-                    .map(|e| e.hamming_distance(query_sketch.simhash))
-                    .unwrap_or(64);
-                let matching_top_terms = entry
-                    .map(|e| e.count_matching_top_terms(&query_sketch.top_terms))
-                    .unwrap_or(0);
+                let hamming_distance =
+                    entry.map_or(64, |e| e.hamming_distance(query_sketch.simhash));
+                let matching_top_terms =
+                    entry.map_or(0, |e| e.count_matching_top_terms(&query_sketch.top_terms));
 
                 SketchCandidate {
                     frame_id,
@@ -278,7 +274,7 @@ impl Memvid {
             term_filter_hits,
             simhash_hits,
             candidates_returned,
-            scan_us: start.elapsed().as_micros() as u64,
+            scan_us: u64::try_from(start.elapsed().as_micros()).unwrap_or(u64::MAX),
         };
 
         (result, stats)
@@ -307,7 +303,7 @@ mod tests {
         let candidates = mem.find_sketch_candidates("cats pets", None);
 
         // Should find some candidates
-        assert!(!candidates.is_empty() || mem.sketches().len() > 0);
+        assert!(!candidates.is_empty() || !mem.sketches().is_empty());
     }
 
     #[test]

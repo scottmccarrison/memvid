@@ -103,12 +103,15 @@ impl Memvid {
         let mut builder = LexIndexBuilder::new();
         let empty_tags = std::collections::HashMap::new();
         for frame_id in frame_ids {
-            let frame = self.toc.frames.get(*frame_id as usize).cloned().ok_or(
-                MemvidError::InvalidFrame {
+            let frame = self
+                .toc
+                .frames
+                .get(usize::try_from(*frame_id).unwrap_or(0))
+                .cloned()
+                .ok_or(MemvidError::InvalidFrame {
                     frame_id: *frame_id,
                     reason: "frame id out of range for lex segment",
-                },
-            )?;
+                })?;
 
             if frame.status != FrameStatus::Active {
                 continue;
@@ -119,10 +122,10 @@ impl Memvid {
 
             // Use search_text if available (covers no_raw mode), otherwise fall back to content
             let content = if let Some(ref text) = frame.search_text {
-                if !text.trim().is_empty() {
-                    text.clone()
-                } else {
+                if text.trim().is_empty() {
                     self.frame_content(&frame)?
+                } else {
+                    text.clone()
                 }
             } else {
                 self.frame_content(&frame)?
@@ -174,7 +177,7 @@ impl Memvid {
                 continue;
             }
             non_empty_count = non_empty_count.saturating_add(1);
-            let vec_dim = vector.len() as u32;
+            let vec_dim = u32::try_from(vector.len()).unwrap_or(0);
             match dimension {
                 None => dimension = Some(vec_dim),
                 Some(existing) if existing == vec_dim => {}
@@ -347,7 +350,7 @@ impl Memvid {
         let expected = &artifact.bytes[..verify_buf.len()];
         if verify_buf != expected {
             return Err(MemvidError::CheckpointFailed {
-                reason: format!("vec segment write verification failed at offset {}", offset),
+                reason: format!("vec segment write verification failed at offset {offset}"),
             });
         }
 
@@ -568,9 +571,9 @@ impl Memvid {
             let existing = latest
                 .get(path.as_str())
                 .map(|descriptor| (*descriptor).clone());
-            let requires_append = existing.as_ref().map_or(true, |descriptor| {
-                descriptor.common.checksum != blob.checksum
-            });
+            let requires_append = existing
+                .as_ref()
+                .is_none_or(|descriptor| descriptor.common.checksum != blob.checksum);
 
             let artifact = if requires_append {
                 Some(TantivySegmentArtifact {
@@ -661,8 +664,7 @@ impl Memvid {
             .indexes
             .lex
             .as_ref()
-            .map(|manifest| manifest.doc_count)
-            .unwrap_or(0);
+            .map_or(0, |manifest| manifest.doc_count);
         if current_doc_count != delta.doc_count {
             changed = true;
         }
@@ -672,8 +674,7 @@ impl Memvid {
             .indexes
             .lex
             .as_ref()
-            .map(|manifest| manifest.checksum)
-            .unwrap_or([0u8; 32]);
+            .map_or([0u8; 32], |manifest| manifest.checksum);
         if current_checksum != delta.checksum {
             changed = true;
         }

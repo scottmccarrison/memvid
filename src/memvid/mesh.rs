@@ -63,7 +63,7 @@ impl Memvid {
 
     /// Add a mesh edge (relationship) to the Logic-Mesh.
     ///
-    /// The edge is deduplicated by (from, to, link_type).
+    /// The edge is deduplicated by (from, to, `link_type`).
     ///
     /// # Arguments
     /// * `edge` - The mesh edge to add
@@ -95,6 +95,7 @@ impl Memvid {
     ///
     /// # Returns
     /// A list of entities found by traversing the relationships.
+    #[must_use]
     pub fn follow(&self, start: &str, link: &str, hops: usize) -> Vec<FollowResult> {
         self.logic_mesh.follow(start, link, hops)
     }
@@ -106,6 +107,7 @@ impl Memvid {
     ///
     /// # Returns
     /// The matching node if found.
+    #[must_use]
     pub fn find_entity(&self, name: &str) -> Option<&MeshNode> {
         self.logic_mesh.find_node(name)
     }
@@ -117,6 +119,7 @@ impl Memvid {
     ///
     /// # Returns
     /// A list of entity nodes that have mentions in the specified frame.
+    #[must_use]
     pub fn frame_entities(&self, frame_id: FrameId) -> Vec<&MeshNode> {
         self.logic_mesh
             .nodes
@@ -132,6 +135,7 @@ impl Memvid {
     ///
     /// # Returns
     /// A list of entity nodes matching the specified kind.
+    #[must_use]
     pub fn entities_by_kind(&self, kind: EntityKind) -> Vec<&MeshNode> {
         self.logic_mesh
             .nodes
@@ -144,6 +148,7 @@ impl Memvid {
     ///
     /// # Returns
     /// Statistics including node count, edge count, and breakdowns by kind/link type.
+    #[must_use]
     pub fn logic_mesh_stats(&self) -> LogicMeshStats {
         self.logic_mesh.stats()
     }
@@ -152,16 +157,19 @@ impl Memvid {
     ///
     /// # Returns
     /// `true` if the mesh has nodes or edges.
+    #[must_use]
     pub fn has_logic_mesh(&self) -> bool {
         !self.logic_mesh.is_empty()
     }
 
     /// Get the number of entity nodes in the mesh.
+    #[must_use]
     pub fn mesh_node_count(&self) -> usize {
         self.logic_mesh.nodes.len()
     }
 
     /// Get the number of relationship edges in the mesh.
+    #[must_use]
     pub fn mesh_edge_count(&self) -> usize {
         self.logic_mesh.edges.len()
     }
@@ -169,6 +177,7 @@ impl Memvid {
     /// Get entities for a frame as `SearchHitEntity` for search metadata.
     ///
     /// Returns entities from the Logic-Mesh that appear in the given frame.
+    #[must_use]
     pub fn frame_entities_for_search(&self, frame_id: FrameId) -> Vec<SearchHitEntity> {
         self.logic_mesh
             .nodes

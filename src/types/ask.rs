@@ -65,10 +65,10 @@ pub struct AskRequest {
     #[serde(default)]
     pub mode: AskMode,
     #[serde(default)]
-    /// Replay: Filter to frames with id <= as_of_frame (time-travel view).
+    /// Replay: Filter to frames with id <= `as_of_frame` (time-travel view).
     pub as_of_frame: Option<FrameId>,
     #[serde(default)]
-    /// Replay: Filter to frames with timestamp <= as_of_ts (time-travel view).
+    /// Replay: Filter to frames with timestamp <= `as_of_ts` (time-travel view).
     pub as_of_ts: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     /// Adaptive retrieval configuration. When set, dynamically determines how many

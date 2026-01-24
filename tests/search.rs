@@ -79,7 +79,7 @@ fn search_basic_query() {
         })
         .unwrap();
 
-    assert!(results.hits.len() > 0, "Should find quantum document");
+    assert!(!results.hits.is_empty(), "Should find quantum document");
     assert!(
         results.hits[0].uri.contains("quantum"),
         "Top result should be quantum physics"
@@ -232,7 +232,7 @@ fn search_returns_snippets() {
         })
         .unwrap();
 
-    assert!(results.hits.len() > 0);
+    assert!(!results.hits.is_empty());
     let hit = &results.hits[0];
 
     // Snippet should contain matched content

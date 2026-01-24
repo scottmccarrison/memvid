@@ -18,11 +18,12 @@ impl PassthroughReader {
     fn supported_format(format: Option<DocumentFormat>) -> bool {
         matches!(
             format,
-            Some(DocumentFormat::Pdf)
-                | Some(DocumentFormat::PlainText)
-                | Some(DocumentFormat::Markdown)
-                | Some(DocumentFormat::Html)
-                | None
+            Some(
+                DocumentFormat::Pdf
+                    | DocumentFormat::PlainText
+                    | DocumentFormat::Markdown
+                    | DocumentFormat::Html
+            ) | None
         )
     }
 }
@@ -34,12 +35,9 @@ impl DocumentReader for PassthroughReader {
 
     fn supports(&self, hint: &ReaderHint<'_>) -> bool {
         Self::supported_format(hint.format)
-            || hint
-                .mime
-                .map(|mime| {
-                    mime.eq_ignore_ascii_case("application/pdf") || mime.starts_with("text/")
-                })
-                .unwrap_or(true)
+            || hint.mime.is_none_or(|mime| {
+                mime.eq_ignore_ascii_case("application/pdf") || mime.starts_with("text/")
+            })
     }
 
     fn extract(&self, bytes: &[u8], _hint: &ReaderHint<'_>) -> Result<ReaderOutput> {

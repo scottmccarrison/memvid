@@ -1,3 +1,5 @@
+// Safe unwrap/expect: Option takes with immediate value replacement.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 use std::cell::Cell;
 use std::cmp::min;
 use std::fs::OpenOptions;
@@ -35,7 +37,7 @@ fn set_doctor_quiet(quiet: bool) {
 
 /// Check if doctor logging is suppressed.
 fn is_doctor_quiet() -> bool {
-    DOCTOR_QUIET.with(|q| q.get())
+    DOCTOR_QUIET.with(std::cell::Cell::get)
 }
 
 /// Conditionally print doctor debug messages based on quiet flag.
@@ -104,6 +106,7 @@ fn try_recover_from_wal_corruption(path: &Path) -> Result<Memvid> {
     );
 
     // Zero out the entire WAL region to create a clean slate
+    #[allow(clippy::cast_possible_truncation)]
     let wal_size = header.wal_size as usize;
     let zeros = vec![0u8; min(1024 * 1024, wal_size)]; // Write in 1MB chunks
     let mut written = 0;
@@ -199,7 +202,7 @@ impl DoctorPlanner {
                     action: DoctorActionKind::HealHeaderPointer,
                     required: true,
                     reasons: vec![DoctorFindingCode::HeaderFooterOffsetMismatch],
-                    note: Some(format!("heal footer offset to {}", offset)),
+                    note: Some(format!("heal footer offset to {offset}")),
                     detail: Some(DoctorActionDetail::HeaderPointer {
                         target_footer_offset: offset,
                     }),
@@ -617,6 +620,7 @@ impl DoctorPlanner {
                 ));
                 return;
             }
+            #[allow(clippy::cast_possible_truncation)]
             let mut buf = vec![0u8; manifest.bytes_length as usize];
             if let Err(err) = file.seek(SeekFrom::Start(manifest.bytes_offset)) {
                 probe.index.needs_lex = true;
@@ -689,8 +693,7 @@ impl DoctorPlanner {
                 .segment_catalog
                 .vec_segments
                 .first()
-                .map(|s| s.dimension)
-                .unwrap_or(0);
+                .map_or(0, |s| s.dimension);
 
             doctor_log!(
                 "doctor: inspect_vec_index (segment_catalog) segments={} total_vectors={} dim={}",
@@ -721,18 +724,19 @@ impl DoctorPlanner {
                     probe.index.needs_vec = true;
                     probe.findings.push(DoctorFinding::warning(
                         DoctorFindingCode::VecIndexCorrupt,
-                        format!("vec segment {} exceeds safety limit", i),
+                        format!("vec segment {i} exceeds safety limit"),
                     ));
                     continue;
                 }
 
                 // Read and validate segment
+                #[allow(clippy::cast_possible_truncation)]
                 let mut buf = vec![0u8; segment.common.bytes_length as usize];
                 if let Err(err) = file.seek(SeekFrom::Start(segment.common.bytes_offset)) {
                     probe.index.needs_vec = true;
                     probe.findings.push(DoctorFinding::warning(
                         DoctorFindingCode::VecIndexCorrupt,
-                        format!("vec segment {} seek error: {}", i, err),
+                        format!("vec segment {i} seek error: {err}"),
                     ));
                     continue;
                 }
@@ -740,7 +744,7 @@ impl DoctorPlanner {
                     probe.index.needs_vec = true;
                     probe.findings.push(DoctorFinding::warning(
                         DoctorFindingCode::VecIndexCorrupt,
-                        format!("vec segment {} read error: {}", i, err),
+                        format!("vec segment {i} read error: {err}"),
                     ));
                     continue;
                 }
@@ -750,7 +754,7 @@ impl DoctorPlanner {
                     probe.index.needs_vec = true;
                     probe.findings.push(DoctorFinding::warning(
                         DoctorFindingCode::VecIndexCorrupt,
-                        format!("vec segment {} decode error: {}", i, err),
+                        format!("vec segment {i} decode error: {err}"),
                     ));
                 }
             }
@@ -798,6 +802,7 @@ impl DoctorPlanner {
             return;
         }
 
+        #[allow(clippy::cast_possible_truncation)]
         let mut buf = vec![0u8; manifest.bytes_length as usize];
         if let Err(err) = file.seek(SeekFrom::Start(manifest.bytes_offset)) {
             probe.index.needs_vec = true;
@@ -895,7 +900,7 @@ impl DoctorExecutor {
                     doctor_log!("doctor: WAL recovery failed: {}", err);
                     additional_findings.push(DoctorFinding::error(
                         DoctorFindingCode::WalChecksumMismatch,
-                        format!("WAL corrupted and recovery failed: {}", err),
+                        format!("WAL corrupted and recovery failed: {err}"),
                     ));
                     return Ok(DoctorReport {
                         plan,
@@ -935,7 +940,7 @@ impl DoctorExecutor {
                                         );
                                         additional_findings.push(DoctorFinding::error(
                                             DoctorFindingCode::InternalError,
-                                            format!("Aggressive repair succeeded but file still corrupt: {}", retry_err),
+                                            format!("Aggressive repair succeeded but file still corrupt: {retry_err}"),
                                         ));
                                         return Ok(DoctorReport {
                                             plan,
@@ -952,7 +957,7 @@ impl DoctorExecutor {
                                 doctor_log!("doctor: aggressive repair failed: {}", repair_err);
                                 additional_findings.push(DoctorFinding::error(
                                     DoctorFindingCode::InternalError,
-                                    format!("Aggressive repair failed: {}", repair_err),
+                                    format!("Aggressive repair failed: {repair_err}"),
                                 ));
                                 return Ok(DoctorReport {
                                     plan,
@@ -1143,7 +1148,7 @@ impl DoctorExecutor {
                             doctor_log!("doctor: WARNING - final WAL cleanup failed: {}", err);
                             additional_findings.push(DoctorFinding::warning(
                                 DoctorFindingCode::InternalError,
-                                format!("final WAL cleanup failed: {}", err),
+                                format!("final WAL cleanup failed: {err}"),
                             ));
                         } else {
                             doctor_log!("doctor: final WAL cleanup successful");
@@ -1224,7 +1229,11 @@ impl DoctorExecutor {
 
             metrics.phase_durations.push(DoctorPhaseDuration {
                 phase: phase.phase,
-                duration_ms: phase_start.elapsed().as_millis() as u64,
+                duration_ms: phase_start
+                    .elapsed()
+                    .as_millis()
+                    .try_into()
+                    .unwrap_or(u64::MAX),
             });
             metrics.actions_completed += actions
                 .iter()
@@ -1250,7 +1259,7 @@ impl DoctorExecutor {
             }
         }
 
-        metrics.total_duration_ms = start.elapsed().as_millis() as u64;
+        metrics.total_duration_ms = start.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
 
         if overall_failed {
             if let Some(original) = &original_header {
@@ -1498,10 +1507,10 @@ impl DoctorExecutor {
         );
         let mut remaining = mem.header.wal_size;
         let mut offset = mem.header.wal_offset;
-        let chunk_size = min(remaining as usize, 4096).max(1);
+        let chunk_size = (remaining.min(4096) as usize).max(1);
         let zeros = vec![0u8; chunk_size];
         while remaining > 0 {
-            let write_len = min(remaining as usize, zeros.len());
+            let write_len = usize::try_from(remaining.min(zeros.len() as u64)).unwrap_or(0);
             mem.file.seek(SeekFrom::Start(offset))?;
             mem.file.write_all(&zeros[..write_len])?;
             remaining -= write_len as u64;
@@ -1581,7 +1590,7 @@ impl DoctorExecutor {
         let mut buf = [0u8; 8];
         reader.read_exact(&mut buf)?;
 
-        if &buf == FOOTER_MAGIC {
+        if buf == FOOTER_MAGIC {
             doctor_log!(
                 "doctor: [Tier 2] Footer found at expected location: {}",
                 expected_offset
@@ -1598,7 +1607,7 @@ impl DoctorExecutor {
         for offset in (scan_start..file_size.saturating_sub(FOOTER_SIZE)).rev() {
             reader.seek(SeekFrom::Start(offset))?;
             reader.read_exact(&mut buf)?;
-            if &buf == FOOTER_MAGIC {
+            if buf == FOOTER_MAGIC {
                 doctor_log!("doctor: [Tier 2] Footer found at offset: {}", offset);
                 return Ok(offset);
             }
@@ -1614,7 +1623,7 @@ impl DoctorExecutor {
         })
     }
 
-    /// Tier 2 Aggressive Repair: Fix header's footer_offset pointer.
+    /// Tier 2 Aggressive Repair: Fix header's `footer_offset` pointer.
     fn aggressive_header_repair(path: &Path) -> Result<()> {
         doctor_log!("doctor: [Tier 2] Attempting aggressive header repair");
 
@@ -1643,11 +1652,7 @@ impl DoctorExecutor {
         }
 
         // Fix header
-        let mismatch = if actual_footer_offset > header_footer_offset {
-            actual_footer_offset - header_footer_offset
-        } else {
-            header_footer_offset - actual_footer_offset
-        };
+        let mismatch = actual_footer_offset.abs_diff(header_footer_offset);
         doctor_log!(
             "doctor: [Tier 2] Mismatch: {} bytes, repairing...",
             mismatch

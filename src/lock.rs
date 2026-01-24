@@ -81,6 +81,7 @@ impl FileLock {
         Ok(self.file.try_clone()?)
     }
 
+    #[must_use]
     pub fn mode(&self) -> LockMode {
         self.mode
     }

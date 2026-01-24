@@ -50,11 +50,13 @@ pub struct ReplayResult {
 
 impl ReplayResult {
     /// Check if the replay was successful (all actions matched).
+    #[must_use]
     pub fn is_success(&self) -> bool {
         self.mismatched_actions == 0
     }
 
     /// Get the match rate as a percentage.
+    #[must_use]
     pub fn match_rate(&self) -> f64 {
         if self.total_actions == 0 {
             100.0
@@ -156,7 +158,7 @@ impl<'a> ReplayEngine<'a> {
                 .iter()
                 .find(|c| c.id == checkpoint_id)
                 .ok_or_else(|| MemvidError::InvalidQuery {
-                    reason: format!("Checkpoint {} not found in session", checkpoint_id),
+                    reason: format!("Checkpoint {checkpoint_id} not found in session"),
                 })?;
             checkpoint.at_sequence
         } else {
@@ -195,8 +197,7 @@ impl<'a> ReplayEngine<'a> {
                         if frame_count > 0 {
                             action_result.matched = true;
                             action_result.diff = Some(format!(
-                                "Put verified (seq {}, {} frames total)",
-                                frame_id, frame_count
+                                "Put verified (seq {frame_id}, {frame_count} frames total)"
                             ));
                             result.matched_actions += 1;
                         } else {
@@ -277,13 +278,7 @@ impl<'a> ReplayEngine<'a> {
                                         }
                                         action_result.matched = false;
                                         action_result.diff = Some(format!(
-                                            "DISCOVERY: original found {}, replay with top-k={} found {} (+{} docs). Query: \"{}\"{}",
-                                            result_count,
-                                            replay_top_k,
-                                            replay_count,
-                                            extra_count,
-                                            query,
-                                            doc_details
+                                            "DISCOVERY: original found {result_count}, replay with top-k={replay_top_k} found {replay_count} (+{extra_count} docs). Query: \"{query}\"{doc_details}"
                                         ));
                                     } else {
                                         // Discovery DOWN: replay found fewer docs (lower top-k would miss docs)
@@ -302,18 +297,11 @@ impl<'a> ReplayEngine<'a> {
                                             ));
                                         }
                                         doc_details.push_str(&format!(
-                                            "\n    {} document(s) would be MISSED with top-k={}",
-                                            missed_count, replay_top_k
+                                            "\n    {missed_count} document(s) would be MISSED with top-k={replay_top_k}"
                                         ));
                                         action_result.matched = false;
                                         action_result.diff = Some(format!(
-                                            "FILTER: original found {}, replay with top-k={} would only find {} (-{} docs). Query: \"{}\"{}",
-                                            result_count,
-                                            replay_top_k,
-                                            replay_count,
-                                            missed_count,
-                                            query,
-                                            doc_details
+                                            "FILTER: original found {result_count}, replay with top-k={replay_top_k} would only find {replay_count} (-{missed_count} docs). Query: \"{query}\"{doc_details}"
                                         ));
                                     }
 
@@ -330,15 +318,14 @@ impl<'a> ReplayEngine<'a> {
                                 } else {
                                     action_result.matched = false;
                                     action_result.diff = Some(format!(
-                                        "Result count mismatch: expected {}, got {}",
-                                        result_count, replay_count
+                                        "Result count mismatch: expected {result_count}, got {replay_count}"
                                     ));
                                     result.mismatched_actions += 1;
                                 }
                             }
                             Err(e) => {
                                 action_result.matched = false;
-                                action_result.diff = Some(format!("Search failed: {}", e));
+                                action_result.diff = Some(format!("Search failed: {e}"));
                                 result.mismatched_actions += 1;
                             }
                         }
@@ -361,7 +348,7 @@ impl<'a> ReplayEngine<'a> {
                             action
                                 .affected_frames
                                 .iter()
-                                .map(|f| f.to_string())
+                                .map(std::string::ToString::to_string)
                                 .collect::<Vec<_>>()
                                 .join(", ")
                         };
@@ -374,16 +361,13 @@ impl<'a> ReplayEngine<'a> {
 
                         // Build audit output
                         let mut details = format!(
-                            "Question: \"{}\"\n         Mode: AUDIT (frozen retrieval)\n         Original Model: {}:{}\n         Frozen frames: [{}]",
-                            query, provider, model, frames_str
+                            "Question: \"{query}\"\n         Mode: AUDIT (frozen retrieval)\n         Original Model: {provider}:{model}\n         Frozen frames: [{frames_str}]"
                         );
 
                         // If model override is set, show it (CLI handles actual LLM re-execution)
                         if let Some(ref override_model) = self.config.use_model {
-                            details.push_str(&format!(
-                                "\n         Override Model: {}",
-                                override_model
-                            ));
+                            details
+                                .push_str(&format!("\n         Override Model: {override_model}"));
                         }
 
                         // Show original answer
@@ -392,20 +376,18 @@ impl<'a> ReplayEngine<'a> {
                         } else {
                             original_answer.clone()
                         };
-                        details.push_str(&format!(
-                            "\n         Original Answer: \"{}\"",
-                            answer_preview
-                        ));
+                        details
+                            .push_str(&format!("\n         Original Answer: \"{answer_preview}\""));
 
                         // In audit mode with frozen frames, we consider it verified
-                        if !action.affected_frames.is_empty() {
-                            details.push_str("\n         Context: VERIFIED (frames frozen)");
-                            action_result.matched = true;
-                            result.matched_actions += 1;
-                        } else {
+                        if action.affected_frames.is_empty() {
                             details.push_str("\n         Context: MISSING (no frames recorded - session recorded before Phase 1)");
                             action_result.matched = false;
                             result.mismatched_actions += 1;
+                        } else {
+                            details.push_str("\n         Context: VERIFIED (frames frozen)");
+                            action_result.matched = true;
+                            result.matched_actions += 1;
                         }
 
                         action_result.diff = Some(details);
@@ -418,7 +400,7 @@ impl<'a> ReplayEngine<'a> {
                             action
                                 .affected_frames
                                 .iter()
-                                .map(|f| f.to_string())
+                                .map(std::string::ToString::to_string)
                                 .collect::<Vec<_>>()
                                 .join(", ")
                         };
@@ -437,8 +419,7 @@ impl<'a> ReplayEngine<'a> {
 
                         // Build detailed output
                         let details = format!(
-                            "Question: \"{}\"\n         Model: {}:{}\n         Retrieved frames: [{}]\n         Answer: \"{}\"",
-                            query, provider, model, frames_str, answer_preview
+                            "Question: \"{query}\"\n         Model: {provider}:{model}\n         Retrieved frames: [{frames_str}]\n         Answer: \"{answer_preview}\""
                         );
 
                         action_result.matched = true;
@@ -450,7 +431,7 @@ impl<'a> ReplayEngine<'a> {
                 ActionType::Checkpoint { checkpoint_id } => {
                     // Checkpoints don't need replay, just verification
                     action_result.matched = true;
-                    action_result.diff = Some(format!("Checkpoint {} verified", checkpoint_id));
+                    action_result.diff = Some(format!("Checkpoint {checkpoint_id} verified"));
                     result.matched_actions += 1;
                 }
 
@@ -490,7 +471,7 @@ impl<'a> ReplayEngine<'a> {
                             result.matched_actions += 1;
                         } else {
                             action_result.matched = false;
-                            action_result.diff = Some(format!("Frame {} not found", frame_id));
+                            action_result.diff = Some(format!("Frame {frame_id} not found"));
                             result.mismatched_actions += 1;
                         }
                     }
@@ -507,7 +488,7 @@ impl<'a> ReplayEngine<'a> {
                             result.matched_actions += 1;
                         } else {
                             action_result.matched = false;
-                            action_result.diff = Some(format!("Frame {} still exists", frame_id));
+                            action_result.diff = Some(format!("Frame {frame_id} still exists"));
                             result.mismatched_actions += 1;
                         }
                     }
@@ -516,23 +497,31 @@ impl<'a> ReplayEngine<'a> {
                 ActionType::ToolCall { name, args_hash: _ } => {
                     // Tool calls can't be replayed deterministically
                     result.skipped_actions += 1;
-                    action_result.diff = Some(format!("Tool call '{}' skipped", name));
+                    action_result.diff = Some(format!("Tool call '{name}' skipped"));
                 }
             }
 
-            action_result.duration_ms = action_start.elapsed().as_millis() as u64;
+            action_result.duration_ms = action_start
+                .elapsed()
+                .as_millis()
+                .try_into()
+                .unwrap_or(u64::MAX);
             result.action_results.push(action_result);
 
             // Stop on mismatch if configured
             if self.config.stop_on_mismatch
                 && result.mismatched_actions > 0
-                && result.action_results.last().map_or(false, |r| !r.matched)
+                && result.action_results.last().is_some_and(|r| !r.matched)
             {
                 break;
             }
         }
 
-        result.total_duration_ms = start_time.elapsed().as_millis() as u64;
+        result.total_duration_ms = start_time
+            .elapsed()
+            .as_millis()
+            .try_into()
+            .unwrap_or(u64::MAX);
 
         if self.config.verbose {
             tracing::info!(
@@ -547,6 +536,7 @@ impl<'a> ReplayEngine<'a> {
     }
 
     /// Compare two sessions to find differences.
+    #[must_use]
     pub fn compare_sessions(
         session_a: &ReplaySession,
         session_b: &ReplaySession,
@@ -567,14 +557,14 @@ impl<'a> ReplayEngine<'a> {
             session_b.actions.iter().map(|a| (a.sequence, a)).collect();
 
         // Find actions only in A
-        for (seq, _action) in &a_actions {
+        for seq in a_actions.keys() {
             if !b_actions.contains_key(seq) {
                 comparison.actions_only_in_a.push(*seq);
             }
         }
 
         // Find actions only in B
-        for (seq, _action) in &b_actions {
+        for seq in b_actions.keys() {
             if !a_actions.contains_key(seq) {
                 comparison.actions_only_in_b.push(*seq);
             }
@@ -583,18 +573,7 @@ impl<'a> ReplayEngine<'a> {
         // Compare common actions
         for (seq, action_a) in &a_actions {
             if let Some(action_b) = b_actions.get(seq) {
-                if action_a.action_type.name() != action_b.action_type.name() {
-                    comparison.differing_actions.push(ActionDiff {
-                        sequence: *seq,
-                        action_type_a: action_a.action_type.name().to_string(),
-                        action_type_b: action_b.action_type.name().to_string(),
-                        description: format!(
-                            "Action type mismatch: {} vs {}",
-                            action_a.action_type.name(),
-                            action_b.action_type.name()
-                        ),
-                    });
-                } else {
+                if action_a.action_type.name() == action_b.action_type.name() {
                     // Same type, check details
                     let same = match (&action_a.action_type, &action_b.action_type) {
                         (ActionType::Put { frame_id: a }, ActionType::Put { frame_id: b }) => {
@@ -632,6 +611,17 @@ impl<'a> ReplayEngine<'a> {
                             description: "Action details differ".to_string(),
                         });
                     }
+                } else {
+                    comparison.differing_actions.push(ActionDiff {
+                        sequence: *seq,
+                        action_type_a: action_a.action_type.name().to_string(),
+                        action_type_b: action_b.action_type.name().to_string(),
+                        description: format!(
+                            "Action type mismatch: {} vs {}",
+                            action_a.action_type.name(),
+                            action_b.action_type.name()
+                        ),
+                    });
                 }
             }
         }
@@ -659,6 +649,7 @@ pub struct SessionComparison {
 
 impl SessionComparison {
     /// Check if the sessions are identical.
+    #[must_use]
     pub fn is_identical(&self) -> bool {
         self.actions_only_in_a.is_empty()
             && self.actions_only_in_b.is_empty()

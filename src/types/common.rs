@@ -18,6 +18,7 @@ pub enum CanonicalEncoding {
 }
 
 impl CanonicalEncoding {
+    #[must_use]
     pub const fn from_byte(value: u8) -> Self {
         match value {
             0 => CanonicalEncoding::Plain,
@@ -26,6 +27,7 @@ impl CanonicalEncoding {
         }
     }
 
+    #[must_use]
     pub const fn as_byte(self) -> u8 {
         match self {
             CanonicalEncoding::Plain => 0,
@@ -45,7 +47,7 @@ impl Serialize for CanonicalEncoding {
     where
         S: Serializer,
     {
-        serializer.serialize_u32(self.as_byte() as u32)
+        serializer.serialize_u32(u32::from(self.as_byte()))
     }
 }
 
@@ -141,11 +143,13 @@ pub enum EnrichmentState {
 
 impl EnrichmentState {
     /// Returns true if this frame needs background enrichment.
+    #[must_use]
     pub fn needs_enrichment(&self) -> bool {
         matches!(self, Self::Searchable)
     }
 
     /// Returns true if this frame has full semantic search capability.
+    #[must_use]
     pub fn has_embeddings(&self) -> bool {
         matches!(self, Self::Enriched)
     }

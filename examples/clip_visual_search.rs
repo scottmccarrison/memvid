@@ -27,7 +27,7 @@ fn main() -> memvid_core::Result<()> {
     {
         eprintln!("This example requires the 'clip' feature.");
         eprintln!("Run with: cargo run --example clip_visual_search --features clip");
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(feature = "clip")]

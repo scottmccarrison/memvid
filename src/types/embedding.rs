@@ -2,7 +2,7 @@
 //!
 //! The `EmbeddingProvider` trait defines a unified interface for generating
 //! embeddings from text, supporting both local models (fastembed, candle) and
-//! cloud APIs (OpenAI, Anthropic).
+//! cloud APIs (`OpenAI`, Anthropic).
 
 use crate::error::Result;
 
@@ -31,7 +31,7 @@ impl Default for EmbeddingConfig {
 }
 
 impl EmbeddingConfig {
-    /// Create config for OpenAI text-embedding-3-large
+    /// Create config for `OpenAI` text-embedding-3-large
     #[must_use]
     pub fn openai_large() -> Self {
         Self {
@@ -42,7 +42,7 @@ impl EmbeddingConfig {
         }
     }
 
-    /// Create config for OpenAI text-embedding-3-small
+    /// Create config for `OpenAI` text-embedding-3-small
     #[must_use]
     pub fn openai_small() -> Self {
         Self {
@@ -53,7 +53,7 @@ impl EmbeddingConfig {
         }
     }
 
-    /// Create config for OpenAI text-embedding-ada-002
+    /// Create config for `OpenAI` text-embedding-ada-002
     #[must_use]
     pub fn openai_ada() -> Self {
         Self {
@@ -178,7 +178,7 @@ pub trait EmbeddingProvider: Send + Sync {
 pub enum EmbeddingProviderKind {
     /// Local fastembed/ONNX model
     Local(String),
-    /// OpenAI API
+    /// `OpenAI` API
     OpenAI { model: String, api_key_env: String },
     /// Anthropic API (future)
     Anthropic { model: String, api_key_env: String },
@@ -205,10 +205,12 @@ mod tests {
     }
 
     impl EmbeddingProvider for MockProvider {
+        #[allow(clippy::unnecessary_literal_bound)]
         fn kind(&self) -> &str {
             "mock"
         }
 
+        #[allow(clippy::unnecessary_literal_bound)]
         fn model(&self) -> &str {
             "mock-model"
         }

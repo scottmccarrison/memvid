@@ -48,7 +48,7 @@ impl MemoryKind {
         }
     }
 
-    /// Parse a string into a MemoryKind.
+    /// Parse a string into a `MemoryKind`.
     #[must_use]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
@@ -97,7 +97,7 @@ impl VersionRelation {
         }
     }
 
-    /// Parse a string into a VersionRelation.
+    /// Parse a string into a `VersionRelation`.
     #[must_use]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
@@ -183,7 +183,7 @@ pub struct MemoryCard {
     /// The entity this memory is about (e.g., "user", "user.team", "project.memvid").
     pub entity: String,
 
-    /// The attribute/slot being described (e.g., "employer", "favorite_food", "location").
+    /// The attribute/slot being described (e.g., "employer", "`favorite_food`", "location").
     pub slot: String,
 
     /// The actual value (always stored as string, can be JSON for complex values).
@@ -250,11 +250,11 @@ impl MemoryCard {
         let self_key = self
             .version_key
             .as_ref()
-            .map_or_else(|| self.default_version_key(), |k| k.clone());
+            .map_or_else(|| self.default_version_key(), std::clone::Clone::clone);
         let other_key = other
             .version_key
             .as_ref()
-            .map_or_else(|| other.default_version_key(), |k| k.clone());
+            .map_or_else(|| other.default_version_key(), std::clone::Clone::clone);
 
         if self_key != other_key {
             return false;
@@ -286,7 +286,7 @@ impl MemoryCard {
     }
 }
 
-/// Builder for constructing MemoryCards.
+/// Builder for constructing `MemoryCards`.
 #[derive(Debug, Default)]
 pub struct MemoryCardBuilder {
     kind: Option<MemoryKind>,
@@ -468,7 +468,7 @@ impl MemoryCardBuilder {
         self
     }
 
-    /// Build the MemoryCard.
+    /// Build the `MemoryCard`.
     ///
     /// # Arguments
     /// * `id` - The ID to assign (usually 0, will be reassigned on insert)
@@ -525,7 +525,7 @@ impl MemoryCardBuilder {
     }
 }
 
-/// Error type for MemoryCardBuilder.
+/// Error type for `MemoryCardBuilder`.
 #[derive(Debug, Clone)]
 pub enum MemoryCardBuilderError {
     /// A required field is missing.

@@ -15,6 +15,7 @@ pub struct TimeIndexEntry {
 }
 
 impl TimeIndexEntry {
+    #[must_use]
     pub fn new(timestamp: i64, frame_id: u64) -> Self {
         Self {
             timestamp,
@@ -31,7 +32,7 @@ pub fn append_track<W: Write + Seek>(
 ) -> Result<(u64, u64, [u8; 32])> {
     entries.sort_by_key(|entry| (entry.timestamp, entry.frame_id));
 
-    let offset = writer.seek(SeekFrom::Current(0))?;
+    let offset = writer.stream_position()?;
     let mut hasher = Hasher::new();
 
     writer.write_all(&TIME_INDEX_MAGIC)?;
@@ -51,7 +52,7 @@ pub fn append_track<W: Write + Seek>(
         hasher.update(&id_bytes);
     }
 
-    let end = writer.seek(SeekFrom::Current(0))?;
+    let end = writer.stream_position()?;
     let length = end - offset;
     Ok((offset, length, *hasher.finalize().as_bytes()))
 }
@@ -94,6 +95,8 @@ pub fn read_track<R: Read + Seek>(
         });
     }
 
+    // Safe: count validated by checked_mul and payload_bytes comparison above
+    #[allow(clippy::cast_possible_truncation)]
     let mut entries = Vec::with_capacity(count as usize);
     let mut prev: Option<TimeIndexEntry> = None;
     for _ in 0..count {
@@ -126,6 +129,7 @@ pub fn read_track<R: Read + Seek>(
 }
 
 /// Calculates the checksum for the provided entries in canonical order.
+#[must_use]
 pub fn calculate_checksum(entries: &[TimeIndexEntry]) -> [u8; 32] {
     let mut sorted = entries.to_vec();
     sorted.sort_by_key(|entry| (entry.timestamp, entry.frame_id));
@@ -133,7 +137,7 @@ pub fn calculate_checksum(entries: &[TimeIndexEntry]) -> [u8; 32] {
     let mut hasher = Hasher::new();
     hasher.update(&TIME_INDEX_MAGIC);
     hasher.update(&(sorted.len() as u64).to_le_bytes());
-    for entry in sorted.iter() {
+    for entry in &sorted {
         hasher.update(&entry.timestamp.to_le_bytes());
         hasher.update(&entry.frame_id.to_le_bytes());
     }

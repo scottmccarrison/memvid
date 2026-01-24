@@ -1,20 +1,33 @@
+<!-- HEADER:START -->
 <img width="2000" height="524" alt="Social Cover (9)" src="https://github.com/user-attachments/assets/cf66f045-c8be-494b-b696-b8d7e4fb709c" />
+<!-- HEADER:END -->
 
+<!-- FLAGS:START -->
 <p align="center">
-  <strong>Memvid는 AI 에이전트를 위한 단일 파일 메모리 레이어로, 인스턴스 검색 및 장기 메모리 기능을 제공합니다.</strong><br/>
-  데이터 베이스 없이 지속적이고, 버전 관리가 용이하며 여러 어플리케이션에 자유로운 적용이 가능합니다.
+ <a href="../../README.md">🇺🇸 English</a>
+ <a href="README.es.md">🇪🇸 Español</a>
+ <a href="README.fr.md">🇫🇷 Français</a>
+ <a href="README.so.md">🇸🇴 Soomaali</a>
+ <a href="README.ar.md">🇸🇦 العربية</a>
+ <a href="README.nl.md">🇧🇪/🇳🇱 Nederlands</a>
+ <a href="README.ko.md">🇰🇷 한국어</a>
+ <a href="README.ja.md">🇯🇵 日本語</a>
 </p>
+<!-- FLAGS:END -->
 
+<!-- NAV:START -->
 <p align="center">
-  <a href="https://www.memvid.com">웹사이트</a>
+  <a href="https://www.memvid.com">Website</a>
   ·
-  <a href="https://sandbox.memvid.com">샌드박스</a>
+  <a href="https://sandbox.memvid.com">Try Sandbox</a>
   ·
-  <a href="https://docs.memvid.com">문서</a>
+  <a href="https://docs.memvid.com">Docs</a>
   ·
-  <a href="https://github.com/memvid/memvid/discussions">토론</a>
+  <a href="https://github.com/memvid/memvid/discussions">Discussions</a>
 </p>
+<!-- NAV:END -->
 
+<!-- BADGES:START -->
 <p align="center">
   <a href="https://crates.io/crates/memvid-core"><img src="https://img.shields.io/crates/v/memvid-core?style=flat-square&logo=rust" alt="Crates.io" /></a>
   <a href="https://docs.rs/memvid-core"><img src="https://img.shields.io/docsrs/memvid-core?style=flat-square&logo=docs.rs" alt="docs.rs" /></a>
@@ -29,7 +42,13 @@
 </p>
 
 <p align="center">
-    <a href="https://trendshift.io/repositories/17293" target="_blank"><img src="https://trendshift.io/api/badge/repositories/17293" alt="memvid%2Fmemvid | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/</a>
+    <a href="https://trendshift.io/repositories/17293" target="_blank"><img src="https://trendshift.io/api/badge/repositories/17293" alt="memvid%2Fmemvid | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+</p>
+<!-- BADGES:END -->
+
+<p align="center">
+  <strong>Memvid는 AI 에이전트를 위한 단일 파일 메모리 레이어로, 인스턴스 검색 및 장기 메모리 기능을 제공합니다.</strong><br/>
+  데이터 베이스 없이 지속적이고, 버전 관리가 용이하며 여러 어플리케이션에 자유로운 적용이 가능합니다.
 </p>
 
 <h2 align="center">⭐️ STAR로 이 프로젝트를 지원해주세요 ⭐️</h2>

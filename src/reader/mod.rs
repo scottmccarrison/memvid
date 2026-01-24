@@ -33,6 +33,7 @@ pub enum DocumentFormat {
 }
 
 impl DocumentFormat {
+    #[must_use]
     pub fn label(self) -> &'static str {
         match self {
             Self::Pdf => "pdf",
@@ -125,6 +126,7 @@ impl ReaderDiagnostics {
         self.fallback = true;
     }
 
+    #[must_use]
     pub fn with_metadata(mut self, value: Value) -> Self {
         self.extra_metadata = value;
         self
@@ -154,7 +156,7 @@ impl ReaderDiagnostics {
 
 /// Trait implemented by document readers that can extract text from supported formats.
 pub trait DocumentReader: Send + Sync {
-    /// Human-readable name used for diagnostics (e.g., "document_processor", "pdfium").
+    /// Human-readable name used for diagnostics (e.g., "`document_processor`", "pdfium").
     fn name(&self) -> &'static str;
 
     /// Return true if this reader is a good match for the provided hint.

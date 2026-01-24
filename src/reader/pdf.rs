@@ -34,8 +34,7 @@ impl PdfReader {
     }
 
     fn supports_mime(mime: Option<&str>) -> bool {
-        mime.map(|m| m.eq_ignore_ascii_case("application/pdf"))
-            .unwrap_or(false)
+        mime.is_some_and(|m| m.eq_ignore_ascii_case("application/pdf"))
     }
 
     fn supports_magic(magic: Option<&[u8]>) -> bool {
@@ -106,7 +105,7 @@ impl PdfReader {
             pages += 1;
         }
 
-        let duration_ms = start.elapsed().as_millis() as u64;
+        let duration_ms = start.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
         let trimmed = combined.trim();
         if trimmed.is_empty() {
             return Err(crate::MemvidError::ExtractionFailed {
@@ -169,8 +168,8 @@ impl DocumentReader for PdfReader {
         {
             let _ = hint;
             let document = Self::processor().extract_from_bytes(bytes)?;
-            return Ok(ReaderOutput::new(document, self.name())
-                .with_diagnostics(ReaderDiagnostics::default()));
+            Ok(ReaderOutput::new(document, self.name())
+                .with_diagnostics(ReaderDiagnostics::default()))
         }
     }
 }

@@ -63,7 +63,7 @@ fn main() -> Result<()> {
 
     let options = PutOptions::builder()
         .title(&title)
-        .uri(&format!(
+        .uri(format!(
             "mv2://pdfs/{}",
             pdf_path.file_name().unwrap_or_default().to_string_lossy()
         ))

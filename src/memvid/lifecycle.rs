@@ -99,7 +99,7 @@ pub struct Memvid {
 }
 
 /// Controls read-only open behaviour for `.mv2` memories.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct OpenReadOptions {
     pub allow_repair: bool,
 }
@@ -121,14 +121,6 @@ impl Default for LockSettings {
             stale_grace_ms: DEFAULT_STALE_GRACE_MS,
             force_stale: false,
             command: None,
-        }
-    }
-}
-
-impl Default for OpenReadOptions {
-    fn default() -> Self {
-        Self {
-            allow_repair: false,
         }
     }
 }
@@ -261,6 +253,7 @@ impl Memvid {
         Ok(memvid)
     }
 
+    #[must_use]
     pub fn lock_settings(&self) -> &LockSettings {
         &self.lock_settings
     }
@@ -276,6 +269,7 @@ impl Memvid {
     }
 
     /// Get the current vector compression mode
+    #[must_use]
     pub fn vector_compression(&self) -> &VectorCompression {
         &self.vec_compression
     }
@@ -285,6 +279,7 @@ impl Memvid {
     /// Frame IDs are dense indices into `toc.frames`. When a memory is mutable, inserts are first
     /// appended to the embedded WAL and only materialized into `toc.frames` on commit. This helper
     /// lets frontends allocate stable frame IDs before an explicit commit.
+    #[must_use]
     pub fn next_frame_id(&self) -> u64 {
         (self.toc.frames.len() as u64).saturating_add(self.pending_frame_inserts)
     }
@@ -313,7 +308,7 @@ impl Memvid {
         let mut header = HeaderCodec::read(&mut file)?;
         let toc = match read_toc(&mut file, &header) {
             Ok(toc) => toc,
-            Err(err @ MemvidError::Decode(_)) | Err(err @ MemvidError::InvalidToc { .. }) => {
+            Err(err @ (MemvidError::Decode(_) | MemvidError::InvalidToc { .. })) => {
                 tracing::info!("toc decode failed ({}); attempting recovery", err);
                 let (toc, recovered_offset) = recover_toc(&mut file, Some(header.footer_offset))?;
                 if recovered_offset != header.footer_offset
@@ -622,6 +617,13 @@ impl Memvid {
         };
 
         // Read the compressed data from the file
+        if manifest.bytes_length > crate::MAX_INDEX_BYTES {
+            return Err(MemvidError::InvalidToc {
+                reason: "memories track exceeds safety limit".into(),
+            });
+        }
+        // Safe: guarded by MAX_INDEX_BYTES check above
+        #[allow(clippy::cast_possible_truncation)]
         let mut buf = vec![0u8; manifest.bytes_length as usize];
         self.file
             .seek(std::io::SeekFrom::Start(manifest.bytes_offset))?;
@@ -649,6 +651,13 @@ impl Memvid {
         };
 
         // Read the serialized data from the file
+        if manifest.bytes_length > crate::MAX_INDEX_BYTES {
+            return Err(MemvidError::InvalidToc {
+                reason: "logic mesh exceeds safety limit".into(),
+            });
+        }
+        // Safe: guarded by MAX_INDEX_BYTES check above
+        #[allow(clippy::cast_possible_truncation)]
         let mut buf = vec![0u8; manifest.bytes_length as usize];
         self.file
             .seek(std::io::SeekFrom::Start(manifest.bytes_offset))?;
@@ -763,6 +772,7 @@ impl Memvid {
     ///
     /// Returns the binding if this file is bound to a dashboard memory,
     /// or None if unbound.
+    #[must_use]
     pub fn get_memory_binding(&self) -> Option<&crate::types::MemoryBinding> {
         self.toc.memory_binding.as_ref()
     }
@@ -862,7 +872,14 @@ pub(crate) fn read_toc(file: &mut File, header: &Header) -> Result<Toc> {
 
     // Read the entire region from footer_offset to EOF (includes TOC + footer)
     file.seek(SeekFrom::Start(header.footer_offset))?;
+    // Safe: total_size bounded by file length, and we check MAX_INDEX_BYTES before reading
+    #[allow(clippy::cast_possible_truncation)]
     let total_size = (len - header.footer_offset) as usize;
+    if total_size as u64 > crate::MAX_INDEX_BYTES {
+        return Err(MemvidError::InvalidToc {
+            reason: "toc region exceeds safety limit".into(),
+        });
+    }
 
     if total_size < FOOTER_SIZE {
         return Err(MemvidError::InvalidToc {
@@ -882,6 +899,7 @@ pub(crate) fn read_toc(file: &mut File, header: &Header) -> Result<Toc> {
 
     // Extract only the TOC bytes (excluding the footer)
     let toc_bytes = &buf[..footer_start];
+    #[allow(clippy::cast_possible_truncation)]
     if toc_bytes.len() != footer.toc_len as usize {
         return Err(MemvidError::InvalidToc {
             reason: "toc length mismatch".into(),
@@ -951,10 +969,10 @@ fn verify_toc_prefix(bytes: &[u8]) -> Result<()> {
 
 /// Ensure frame payloads do not overlap each other or exceed file boundary.
 ///
-/// Frames in the TOC are ordered by frame_id, not by payload_offset, so we must
-/// sort by payload_offset before checking for overlaps.
+/// Frames in the TOC are ordered by `frame_id`, not by `payload_offset`, so we must
+/// sort by `payload_offset` before checking for overlaps.
 ///
-/// Note: Frames with payload_length == 0 are "virtual" frames (e.g., document
+/// Note: Frames with `payload_length` == 0 are "virtual" frames (e.g., document
 /// frames that reference chunks) and are skipped from this check.
 fn ensure_non_overlapping_frames(toc: &Toc, file_len: u64) -> Result<()> {
     // Collect active frames with actual payloads and sort by payload_offset
@@ -1026,6 +1044,8 @@ pub(crate) fn recover_toc(file: &mut File, hint: Option<u64>) -> Result<(Toc, u6
     if let Some(hint_offset) = hint {
         use crate::footer::FOOTER_SIZE;
 
+        // Safe: file successfully mmapped so length fits in usize
+        #[allow(clippy::cast_possible_truncation)]
         let start = (hint_offset.min(len)) as usize;
         if mmap.len().saturating_sub(start) >= FOOTER_SIZE {
             let toc_end = mmap.len().saturating_sub(FOOTER_SIZE);
@@ -1049,6 +1069,8 @@ pub(crate) fn recover_toc(file: &mut File, hint: Option<u64>) -> Result<(Toc, u6
     // Fallback to manual scan if footer-based recovery failed
     let mut ranges = Vec::new();
     if let Some(hint_offset) = hint {
+        // Safe: file successfully mmapped so length fits in usize
+        #[allow(clippy::cast_possible_truncation)]
         let hint_idx = hint_offset.min(len) as usize;
         ranges.push((hint_idx, mmap.len()));
         if hint_idx > 0 {
@@ -1360,7 +1382,7 @@ pub(crate) fn cleanup_manifest_wal_public(path: &Path) {
 }
 
 /// Single source of truth: does this TOC have a lexical index?
-/// Checks all possible locations: old manifest, lex_segments, and tantivy_segments.
+/// Checks all possible locations: old manifest, `lex_segments`, and `tantivy_segments`.
 pub(crate) fn has_lex_index(toc: &Toc) -> bool {
     toc.segment_catalog.lex_enabled
         || toc.indexes.lex.is_some()
@@ -1441,17 +1463,13 @@ fn validate_segment_integrity(toc: &Toc, header: &Header, file_len: u64) -> Resu
         let end = offset
             .checked_add(length)
             .ok_or_else(|| MemvidError::Doctor {
-                reason: format!(
-                    "Tantivy segment {} offset overflow: {} + {}",
-                    idx, offset, length
-                ),
+                reason: format!("Tantivy segment {idx} offset overflow: {offset} + {length}"),
             })?;
 
         if end > file_len || end > data_limit {
             return Err(MemvidError::Doctor {
                 reason: format!(
-                    "Tantivy segment {} out of bounds: offset={}, length={}, end={}, file_len={}, data_limit={}",
-                    idx, offset, length, end, file_len, data_limit
+                    "Tantivy segment {idx} out of bounds: offset={offset}, length={length}, end={end}, file_len={file_len}, data_limit={data_limit}"
                 ),
             });
         }
@@ -1469,17 +1487,13 @@ fn validate_segment_integrity(toc: &Toc, header: &Header, file_len: u64) -> Resu
         let end = offset
             .checked_add(length)
             .ok_or_else(|| MemvidError::Doctor {
-                reason: format!(
-                    "Time segment {} offset overflow: {} + {}",
-                    idx, offset, length
-                ),
+                reason: format!("Time segment {idx} offset overflow: {offset} + {length}"),
             })?;
 
         if end > file_len || end > data_limit {
             return Err(MemvidError::Doctor {
                 reason: format!(
-                    "Time segment {} out of bounds: offset={}, length={}, end={}, file_len={}, data_limit={}",
-                    idx, offset, length, end, file_len, data_limit
+                    "Time segment {idx} out of bounds: offset={offset}, length={length}, end={end}, file_len={file_len}, data_limit={data_limit}"
                 ),
             });
         }
@@ -1497,17 +1511,13 @@ fn validate_segment_integrity(toc: &Toc, header: &Header, file_len: u64) -> Resu
         let end = offset
             .checked_add(length)
             .ok_or_else(|| MemvidError::Doctor {
-                reason: format!(
-                    "Vec segment {} offset overflow: {} + {}",
-                    idx, offset, length
-                ),
+                reason: format!("Vec segment {idx} offset overflow: {offset} + {length}"),
             })?;
 
         if end > file_len || end > data_limit {
             return Err(MemvidError::Doctor {
                 reason: format!(
-                    "Vec segment {} out of bounds: offset={}, length={}, end={}, file_len={}, data_limit={}",
-                    idx, offset, length, end, file_len, data_limit
+                    "Vec segment {idx} out of bounds: offset={offset}, length={length}, end={end}, file_len={file_len}, data_limit={data_limit}"
                 ),
             });
         }

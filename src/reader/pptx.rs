@@ -24,7 +24,7 @@ impl PptxReader {
 
         let mut slides: Vec<String> = Vec::new();
         for i in 1..=archive.len() {
-            let name = format!("{}{}{}", SLIDE_PREFIX, i, SLIDE_SUFFIX);
+            let name = format!("{SLIDE_PREFIX}{i}{SLIDE_SUFFIX}");
             if let Ok(mut file) = archive.by_name(&name) {
                 let mut xml = String::new();
                 file.read_to_string(&mut xml).map_err(|err| {
@@ -60,14 +60,11 @@ impl DocumentReader for PptxReader {
 
     fn supports(&self, hint: &ReaderHint<'_>) -> bool {
         matches!(hint.format, Some(DocumentFormat::Pptx))
-            || hint
-                .mime
-                .map(|mime| {
-                    mime.eq_ignore_ascii_case(
-                        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                    )
-                })
-                .unwrap_or(false)
+            || hint.mime.is_some_and(|mime| {
+                mime.eq_ignore_ascii_case(
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                )
+            })
     }
 
     fn extract(&self, bytes: &[u8], hint: &ReaderHint<'_>) -> Result<ReaderOutput> {

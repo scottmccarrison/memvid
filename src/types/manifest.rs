@@ -40,8 +40,7 @@ where
             if let Some(size) = seq.size_hint() {
                 if size > LIMIT {
                     return Err(de::Error::custom(format!(
-                        "sequence length {} exceeds bound {}",
-                        size, LIMIT
+                        "sequence length {size} exceeds bound {LIMIT}"
                     )));
                 }
                 let mut values = Vec::with_capacity(size.min(LIMIT));
@@ -57,8 +56,7 @@ where
                 while let Some(element) = seq.next_element()? {
                     if values.len() == LIMIT {
                         return Err(de::Error::custom(format!(
-                            "sequence length exceeds bound {}",
-                            LIMIT
+                            "sequence length exceeds bound {LIMIT}"
                         )));
                     }
                     values.push(element);
@@ -246,19 +244,14 @@ pub struct IndexSegmentRef {
 
 /// Segment category emitted by the parallel builder.
 /// Always defined for backwards compatibility.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum SegmentKind {
+    #[default]
     Lexical,
     Vector,
     Time,
     Temporal,
     Tantivy,
-}
-
-impl Default for SegmentKind {
-    fn default() -> Self {
-        SegmentKind::Lexical
-    }
 }
 
 /// Build-time metrics captured for a sealed segment.
@@ -678,7 +671,7 @@ impl<'de> Deserialize<'de> for TantivySegmentDescriptor {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct IndexManifests {
     pub lex: Option<LexIndexManifest>,
     #[serde(default)]
@@ -687,17 +680,6 @@ pub struct IndexManifests {
     /// CLIP visual embeddings index (separate from text vec index due to different dimensions)
     #[serde(default)]
     pub clip: Option<crate::clip::ClipIndexManifest>,
-}
-
-impl Default for IndexManifests {
-    fn default() -> Self {
-        Self {
-            lex: None,
-            lex_segments: Vec::new(),
-            vec: None,
-            clip: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -718,16 +700,11 @@ pub struct LexSegmentManifest {
     pub checksum: [u8; 32],
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum VectorCompression {
+    #[default]
     None, // Full f32 vectors (1,536 bytes for 384 dims)
     Pq96, // Product quantization with 96 subspaces (96 bytes)
-}
-
-impl Default for VectorCompression {
-    fn default() -> Self {
-        VectorCompression::None
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -742,17 +719,12 @@ pub struct VecIndexManifest {
     pub compression_mode: VectorCompression,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum SegmentCompression {
+    #[default]
     None,
     Zstd,
     Lz4,
-}
-
-impl Default for SegmentCompression {
-    fn default() -> Self {
-        SegmentCompression::None
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -795,7 +767,7 @@ pub struct Toc {
     /// Logic-Mesh graph track (entities and relationships for graph traversal).
     #[serde(default)]
     pub logic_mesh: Option<LogicMeshManifest>,
-    /// Sketch track for fast candidate generation (SimHash + term filters).
+    /// Sketch track for fast candidate generation (`SimHash` + term filters).
     #[serde(default)]
     pub sketch_track: Option<SketchTrackManifest>,
     #[serde(default)]
@@ -897,6 +869,7 @@ pub struct EnrichmentQueueManifest {
 
 impl EnrichmentQueueManifest {
     /// Create a new empty enrichment queue.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             tasks: Vec::new(),
@@ -945,11 +918,13 @@ impl EnrichmentQueueManifest {
     }
 
     /// Check if any enrichment work is pending.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.tasks.is_empty()
     }
 
     /// Get count of pending tasks.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.tasks.len()
     }

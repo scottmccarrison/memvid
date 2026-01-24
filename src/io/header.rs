@@ -92,18 +92,16 @@ impl HeaderCodec {
 
     /// Decodes the canonical header bytes into a strongly typed struct after validation.
     pub fn decode(bytes: &[u8; HEADER_SIZE]) -> Result<Header> {
-        let magic = bytes[..MAGIC.len()].try_into().unwrap();
+        // Extract fixed-size arrays from the header buffer
+        // All indices are compile-time constants, so these slices are guaranteed to fit
+        let magic: [u8; 4] = extract_array(bytes, 0)?;
         if magic != MAGIC {
             return Err(MemvidError::InvalidHeader {
                 reason: "magic mismatch".into(),
             });
         }
 
-        let version = u16::from_le_bytes(
-            bytes[VERSION_OFFSET..VERSION_OFFSET + 2]
-                .try_into()
-                .unwrap(),
-        );
+        let version = u16::from_le_bytes(extract_array(bytes, VERSION_OFFSET)?);
         if version != EXPECTED_VERSION {
             return Err(MemvidError::InvalidHeader {
                 reason: "unsupported version".into(),
@@ -116,40 +114,22 @@ impl HeaderCodec {
             });
         }
 
-        let footer_offset = u64::from_le_bytes(
-            bytes[FOOTER_OFFSET_POS..FOOTER_OFFSET_POS + 8]
-                .try_into()
-                .unwrap(),
-        );
-        let wal_offset = u64::from_le_bytes(
-            bytes[WAL_OFFSET_POS..WAL_OFFSET_POS + 8]
-                .try_into()
-                .unwrap(),
-        );
+        let footer_offset = u64::from_le_bytes(extract_array(bytes, FOOTER_OFFSET_POS)?);
+        let wal_offset = u64::from_le_bytes(extract_array(bytes, WAL_OFFSET_POS)?);
         if wal_offset < WAL_OFFSET {
             return Err(MemvidError::InvalidHeader {
                 reason: "wal_offset precedes data region".into(),
             });
         }
-        let wal_size =
-            u64::from_le_bytes(bytes[WAL_SIZE_POS..WAL_SIZE_POS + 8].try_into().unwrap());
+        let wal_size = u64::from_le_bytes(extract_array(bytes, WAL_SIZE_POS)?);
         if wal_size == 0 {
             return Err(MemvidError::InvalidHeader {
                 reason: "wal_size must be non-zero".into(),
             });
         }
-        let wal_checkpoint_pos = u64::from_le_bytes(
-            bytes[WAL_CHECKPOINT_POS..WAL_CHECKPOINT_POS + 8]
-                .try_into()
-                .unwrap(),
-        );
-        let wal_sequence = u64::from_le_bytes(
-            bytes[WAL_SEQUENCE_POS..WAL_SEQUENCE_POS + 8]
-                .try_into()
-                .unwrap(),
-        );
-        let mut toc_checksum = [0u8; 32];
-        toc_checksum.copy_from_slice(&bytes[TOC_CHECKSUM_POS..TOC_CHECKSUM_END]);
+        let wal_checkpoint_pos = u64::from_le_bytes(extract_array(bytes, WAL_CHECKPOINT_POS)?);
+        let wal_sequence = u64::from_le_bytes(extract_array(bytes, WAL_SEQUENCE_POS)?);
+        let toc_checksum: [u8; 32] = extract_array(bytes, TOC_CHECKSUM_POS)?;
 
         Ok(Header {
             magic,
@@ -162,6 +142,18 @@ impl HeaderCodec {
             toc_checksum,
         })
     }
+}
+
+/// Extracts a fixed-size array from a byte slice at the given offset.
+/// Returns an error if the slice is too short (should never happen with valid headers).
+#[inline]
+fn extract_array<const N: usize>(bytes: &[u8], offset: usize) -> Result<[u8; N]> {
+    bytes
+        .get(offset..offset + N)
+        .and_then(|s| s.try_into().ok())
+        .ok_or_else(|| MemvidError::InvalidHeader {
+            reason: "header truncated".into(),
+        })
 }
 
 fn clear_legacy_lock_metadata(buf: &mut [u8; HEADER_SIZE]) -> bool {

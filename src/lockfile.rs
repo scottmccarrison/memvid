@@ -35,7 +35,7 @@ pub struct LockOptions<'a> {
     pub force_stale: bool,
 }
 
-impl<'a> Default for LockOptions<'a> {
+impl Default for LockOptions<'_> {
     fn default() -> Self {
         Self {
             timeout: Duration::from_millis(DEFAULT_TIMEOUT_MS),
@@ -48,26 +48,31 @@ impl<'a> Default for LockOptions<'a> {
 }
 
 impl<'a> LockOptions<'a> {
+    #[must_use]
     pub fn timeout_ms(mut self, timeout_ms: u64) -> Self {
         self.timeout = Duration::from_millis(timeout_ms);
         self
     }
 
+    #[must_use]
     pub fn heartbeat_ms(mut self, heartbeat_ms: u64) -> Self {
         self.heartbeat = Duration::from_millis(heartbeat_ms);
         self
     }
 
+    #[must_use]
     pub fn stale_grace_ms(mut self, stale_grace_ms: u64) -> Self {
         self.stale_grace = Duration::from_millis(stale_grace_ms);
         self
     }
 
+    #[must_use]
     pub fn command(mut self, command: &'a str) -> Self {
         self.command = Some(command);
         self
     }
 
+    #[must_use]
     pub fn force_stale(mut self, force: bool) -> Self {
         self.force_stale = force;
         self
@@ -95,10 +100,12 @@ impl LockfileGuard {
         Ok(())
     }
 
+    #[must_use]
     pub fn file_id(&self) -> &FileId {
         &self.file_id
     }
 
+    #[must_use]
     pub fn owner_hint(&self) -> LockOwnerHint {
         self.record.to_owner_hint()
     }
@@ -116,8 +123,7 @@ pub fn acquire(path: &Path, options: LockOptions<'_>) -> Result<LockfileGuard> {
     let file_id = registry::compute_file_id(path)?;
     let command = options
         .command
-        .map(std::borrow::ToOwned::to_owned)
-        .unwrap_or_else(default_command);
+        .map_or_else(default_command, std::borrow::ToOwned::to_owned);
     let heartbeat_ms = options
         .heartbeat
         .as_millis()
@@ -149,8 +155,7 @@ pub fn acquire(path: &Path, options: LockOptions<'_>) -> Result<LockfileGuard> {
                 let existing = registry::read_record(&file_id)?;
                 let stale = existing
                     .as_ref()
-                    .map(|rec| registry::is_stale(rec, options.stale_grace))
-                    .unwrap_or(true);
+                    .is_none_or(|rec| registry::is_stale(rec, options.stale_grace));
 
                 if options.force_stale && stale {
                     let _ = registry::remove_record(&file_id);
@@ -172,7 +177,13 @@ pub fn acquire(path: &Path, options: LockOptions<'_>) -> Result<LockfileGuard> {
                             )
                         })
                         .unwrap_or_else(|| "memory locked by another process".to_string());
-                    return Err(LockedError::new(path.to_path_buf(), message, hint, stale).into());
+                    return Err(Box::new(LockedError::new(
+                        path.to_path_buf(),
+                        message,
+                        hint,
+                        stale,
+                    ))
+                    .into());
                 }
 
                 let remaining = options

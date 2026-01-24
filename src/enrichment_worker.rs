@@ -72,6 +72,7 @@ pub struct EnrichmentWorkerHandle {
 
 impl EnrichmentWorkerHandle {
     /// Create a new worker handle.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             stop_signal: Arc::new(AtomicBool::new(false)),
@@ -89,16 +90,19 @@ impl EnrichmentWorkerHandle {
     }
 
     /// Check if stop was requested.
+    #[must_use]
     pub fn should_stop(&self) -> bool {
         self.stop_signal.load(Ordering::SeqCst)
     }
 
     /// Check if worker is currently running.
+    #[must_use]
     pub fn is_running(&self) -> bool {
         self.is_running.load(Ordering::SeqCst)
     }
 
     /// Get current statistics.
+    #[must_use]
     pub fn stats(&self) -> EnrichmentWorkerStats {
         EnrichmentWorkerStats {
             frames_processed: self.frames_processed.load(Ordering::Relaxed),
@@ -137,6 +141,7 @@ impl EnrichmentWorkerHandle {
     }
 
     /// Clone the handle for sharing with the worker thread.
+    #[must_use]
     pub fn clone_handle(&self) -> Self {
         Self {
             stop_signal: Arc::clone(&self.stop_signal),
@@ -261,6 +266,7 @@ pub struct EnrichmentProcessor {
 
 impl EnrichmentProcessor {
     /// Create a new enrichment processor.
+    #[must_use]
     pub fn new(config: EnrichmentWorkerConfig) -> Self {
         Self { config }
     }
@@ -300,13 +306,12 @@ impl EnrichmentProcessor {
         };
 
         // Read current frame state
-        let (text, is_skim, _needs_embedding) = match read_frame(task.frame_id) {
-            Some(data) => data,
-            None => {
-                result.error = Some("Frame not found".to_string());
-                result.elapsed_ms = start.elapsed().as_millis() as u64;
-                return result;
-            }
+        let (text, is_skim, _needs_embedding) = if let Some(data) = read_frame(task.frame_id) {
+            data
+        } else {
+            result.error = Some("Frame not found".to_string());
+            result.elapsed_ms = start.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+            return result;
         };
 
         // Re-extract if this was a skim
@@ -334,7 +339,7 @@ impl EnrichmentProcessor {
             result.error = Some(format!("Index update failed: {err}"));
         }
 
-        result.elapsed_ms = start.elapsed().as_millis() as u64;
+        result.elapsed_ms = start.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
         result
     }
 }
@@ -371,13 +376,12 @@ pub fn run_worker_loop<G, P, M, C>(
 
     while !handle.should_stop() {
         // Get next task
-        let task = match get_next_task() {
-            Some(task) => task,
-            None => {
-                // Queue is empty, wait and check again
-                std::thread::sleep(Duration::from_millis(config.task_delay_ms * 10));
-                continue;
-            }
+        let task = if let Some(task) = get_next_task() {
+            task
+        } else {
+            // Queue is empty, wait and check again
+            std::thread::sleep(Duration::from_millis(config.task_delay_ms * 10));
+            continue;
         };
 
         // Process the task

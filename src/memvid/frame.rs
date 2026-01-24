@@ -70,6 +70,7 @@ impl Read for BlobReader {
                 if remaining == 0 {
                     return Ok(0);
                 }
+                #[allow(clippy::cast_possible_truncation)]
                 let to_read = remaining.min(buf.len() as u64) as usize;
                 file.seek(SeekFrom::Start(*start + *pos))?;
                 let read = file.read(&mut buf[..to_read])?;
@@ -161,9 +162,11 @@ fn mime_is_text(mime: &str) -> bool {
 
 impl Memvid {
     pub fn frame_by_id(&self, frame_id: FrameId) -> Result<Frame> {
+        let index =
+            usize::try_from(frame_id).map_err(|_| MemvidError::FrameNotFound { frame_id })?;
         self.toc
             .frames
-            .get(frame_id as usize)
+            .get(index)
             .cloned()
             .ok_or(MemvidError::FrameNotFound { frame_id })
     }
@@ -178,8 +181,7 @@ impl Memvid {
                 frame
                     .uri
                     .as_deref()
-                    .map(|candidate_uri| candidate_uri == uri)
-                    .unwrap_or(false)
+                    .is_some_and(|candidate_uri| candidate_uri == uri)
                     && frame.status == FrameStatus::Active
             })
             .or_else(|| {
@@ -202,6 +204,7 @@ impl Memvid {
     /// we can skip re-ingestion. The hash is computed from the original file bytes.
     ///
     /// Returns `None` if no matching frame is found.
+    #[must_use]
     pub fn find_frame_by_hash(&self, hash: &[u8; 32]) -> Option<&Frame> {
         self.toc
             .frames
@@ -254,11 +257,17 @@ impl Memvid {
     }
 
     pub fn frame_preview_by_id(&mut self, frame_id: FrameId) -> Result<String> {
-        let frame = self.toc.frames.get(frame_id as usize).cloned().ok_or(
-            MemvidError::InvalidTimeIndex {
+        let index = usize::try_from(frame_id).map_err(|_| MemvidError::InvalidTimeIndex {
+            reason: "frame id too large".into(),
+        })?;
+        let frame = self
+            .toc
+            .frames
+            .get(index)
+            .cloned()
+            .ok_or(MemvidError::InvalidTimeIndex {
                 reason: "frame id out of range".into(),
-            },
-        )?;
+            })?;
         self.frame_preview(&frame)
     }
 
@@ -267,11 +276,17 @@ impl Memvid {
     /// Unlike `frame_preview_by_id` which truncates for display purposes,
     /// this returns the complete text content suitable for LLM processing.
     pub fn frame_text_by_id(&mut self, frame_id: FrameId) -> Result<String> {
-        let frame = self.toc.frames.get(frame_id as usize).cloned().ok_or(
-            MemvidError::InvalidTimeIndex {
+        let index = usize::try_from(frame_id).map_err(|_| MemvidError::InvalidTimeIndex {
+            reason: "frame id too large".into(),
+        })?;
+        let frame = self
+            .toc
+            .frames
+            .get(index)
+            .cloned()
+            .ok_or(MemvidError::InvalidTimeIndex {
                 reason: "frame id out of range".into(),
-            },
-        )?;
+            })?;
         self.frame_content(&frame)
     }
 
@@ -279,7 +294,7 @@ impl Memvid {
         if let Some(text) = frame
             .metadata
             .as_ref()
-            .and_then(|meta| crate::image_preview_from_metadata(meta))
+            .and_then(crate::image_preview_from_metadata)
         {
             return Ok(text);
         }
@@ -294,8 +309,8 @@ impl Memvid {
             let label = video
                 .filename
                 .as_deref()
-                .or_else(|| frame.title.as_deref())
-                .or_else(|| frame.uri.as_deref())
+                .or(frame.title.as_deref())
+                .or(frame.uri.as_deref())
                 .unwrap_or("video");
             segments.push(format!("Video: {label}"));
             if let Some(duration) = video.duration_ms {
@@ -303,7 +318,7 @@ impl Memvid {
                 segments.push(format!("{seconds:.1}s"));
             }
             if let (Some(width), Some(height)) = (video.width, video.height) {
-                segments.push(format!("{}x{}", width, height));
+                segments.push(format!("{width}x{height}"));
             }
             if let Some(codec) = &video.codec {
                 if !codec.trim().is_empty() {
@@ -337,40 +352,43 @@ impl Memvid {
             return Ok(None);
         }
         self.ensure_vec_index()?;
-        Ok(self.vec_index.as_ref().and_then(|index| {
-            index
-                .embedding_for(frame_id)
-                .map(|embedding| embedding.to_vec())
-        }))
+        Ok(self
+            .vec_index
+            .as_ref()
+            .and_then(|index| index.embedding_for(frame_id).map(<[f32]>::to_vec)))
     }
 
     pub fn frame_context(&mut self, frame_id: FrameId, query: &str) -> Result<(String, usize)> {
-        let frame = self.toc.frames.get(frame_id as usize).cloned().ok_or(
-            MemvidError::InvalidTimeIndex {
+        let index = usize::try_from(frame_id).map_err(|_| MemvidError::InvalidTimeIndex {
+            reason: "frame id too large".into(),
+        })?;
+        let frame = self
+            .toc
+            .frames
+            .get(index)
+            .cloned()
+            .ok_or(MemvidError::InvalidTimeIndex {
                 reason: "frame id out of range".into(),
-            },
-        )?;
+            })?;
         let preview = self.frame_preview(&frame)?;
         let content = self.frame_content(&frame)?;
         let count = query
             .split_whitespace()
             .filter(|token| !token.is_empty())
-            .map(|needle| needle.to_lowercase())
+            .map(str::to_lowercase)
             .map(|needle| content.to_lowercase().matches(&needle).count())
             .sum();
         Ok((preview, count))
     }
 
     pub(crate) fn frame_canonical_bytes(&mut self, frame: &Frame) -> Result<Vec<u8>> {
-        if frame.role == FrameRole::Document {
-            if frame.chunk_manifest.is_some() {
-                let chunks = self.document_chunk_payloads(frame)?;
-                let mut buffer = Vec::new();
-                for (_, bytes) in chunks {
-                    buffer.extend_from_slice(&bytes);
-                }
-                return Ok(buffer);
+        if frame.role == FrameRole::Document && frame.chunk_manifest.is_some() {
+            let chunks = self.document_chunk_payloads(frame)?;
+            let mut buffer = Vec::new();
+            for (_, bytes) in chunks {
+                buffer.extend_from_slice(&bytes);
             }
+            return Ok(buffer);
         }
         let raw = self.read_frame_payload_bytes(frame)?;
         let decoded = crate::decode_canonical_bytes(&raw, frame.canonical_encoding, frame.id)?;
@@ -409,8 +427,9 @@ impl Memvid {
             if !mime_is_text(meta) {
                 let logical = frame
                     .canonical_length
-                    .or_else(|| Some(frame.payload_length))
+                    .or(Some(frame.payload_length))
                     .unwrap_or(frame.payload_length);
+                #[allow(clippy::cast_possible_truncation)]
                 return Ok(Self::render_binary_summary(logical as usize));
             }
         }
@@ -530,24 +549,27 @@ impl Memvid {
             FrameRole::DocumentChunk => {
                 // Try to resolve via parent's chunk manifest (new format)
                 if let Some(parent_id) = frame.parent_id {
-                    if let Some(parent) = self.toc.frames.get(parent_id as usize).cloned() {
-                        if parent.chunk_manifest.is_some() {
-                            if let Ok(payloads) = self.document_chunk_payloads(&parent) {
-                                if let Some(idx) = frame.chunk_index {
-                                    let idx = idx as usize;
-                                    if idx < payloads.len() {
-                                        let mut offset = 0usize;
-                                        for (_, bytes) in payloads.iter().take(idx) {
-                                            offset += bytes.len();
+                    // Safe frame lookup
+                    if let Ok(index) = usize::try_from(parent_id) {
+                        if let Some(parent) = self.toc.frames.get(index).cloned() {
+                            if parent.chunk_manifest.is_some() {
+                                if let Ok(payloads) = self.document_chunk_payloads(&parent) {
+                                    if let Some(idx) = frame.chunk_index {
+                                        let idx = idx as usize;
+                                        if idx < payloads.len() {
+                                            let mut offset = 0usize;
+                                            for (_, bytes) in payloads.iter().take(idx) {
+                                                offset += bytes.len();
+                                            }
+                                            let (_, bytes) = &payloads[idx];
+                                            let text = String::from_utf8_lossy(bytes).into_owned();
+                                            let end = offset + bytes.len();
+                                            return Ok(ChunkInfo {
+                                                start: offset,
+                                                end,
+                                                text,
+                                            });
                                         }
-                                        let (_, bytes) = &payloads[idx];
-                                        let text = String::from_utf8_lossy(bytes).into_owned();
-                                        let end = offset + bytes.len();
-                                        return Ok(ChunkInfo {
-                                            start: offset,
-                                            end,
-                                            text,
-                                        });
                                     }
                                 }
                             }
@@ -589,6 +611,8 @@ impl Memvid {
     pub(crate) fn read_frame_payload_bytes(&mut self, frame: &Frame) -> Result<Vec<u8>> {
         self.validate_frame_bounds(frame)?;
         self.file.seek(SeekFrom::Start(frame.payload_offset))?;
+        // Safe: guarded by MAX_FRAME_BYTES check
+        #[allow(clippy::cast_possible_truncation)]
         let mut buf = vec![0u8; frame.payload_length as usize];
         self.file.read_exact(&mut buf)?;
         Ok(buf)

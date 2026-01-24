@@ -1,13 +1,50 @@
-<img width="2000" height="491" alt="Social Cover (6)" src="https://github.com/user-attachments/assets/4e256804-53ac-4173-bcff-81994d52bf5c" />
+<!-- HEADER:START -->
+<img width="2000" height="524" alt="Social Cover (9)" src="https://github.com/user-attachments/assets/cf66f045-c8be-494b-b696-b8d7e4fb709c" />
+<!-- HEADER:END -->
+
+<!-- FLAGS:START -->
+<p align="center">
+ <a href="../../README.md">🇺🇸 English</a>
+ <a href="README.es.md">🇪🇸 Español</a>
+ <a href="README.fr.md">🇫🇷 Français</a>
+ <a href="README.so.md">🇸🇴 Soomaali</a>
+ <a href="README.ar.md">🇸🇦 العربية</a>
+ <a href="README.nl.md">🇧🇪/🇳🇱 Nederlands</a>
+ <a href="README.ko.md">🇰🇷 한국어</a>
+ <a href="README.ja.md">🇯🇵 日本語</a>
+</p>
+<!-- FLAGS:END -->
+
+<!-- NAV:START -->
+<p align="center">
+  <a href="https://www.memvid.com">Website</a>
+  ·
+  <a href="https://sandbox.memvid.com">Try Sandbox</a>
+  ·
+  <a href="https://docs.memvid.com">Docs</a>
+  ·
+  <a href="https://github.com/memvid/memvid/discussions">Discussions</a>
+</p>
+<!-- NAV:END -->
+
+<!-- BADGES:START -->
+<p align="center">
+  <a href="https://crates.io/crates/memvid-core"><img src="https://img.shields.io/crates/v/memvid-core?style=flat-square&logo=rust" alt="Crates.io" /></a>
+  <a href="https://docs.rs/memvid-core"><img src="https://img.shields.io/docsrs/memvid-core?style=flat-square&logo=docs.rs" alt="docs.rs" /></a>
+  <a href="https://github.com/memvid/memvid/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" alt="License" /></a>
+</p>
 
 <p align="center">
-<a href="../../README.md">🇺🇸 English</a>
-<a href="README.es.md">🇪🇸 Español</a>
-<a href="README.fr.md">🇫🇷 Français</a>
-<a href="README.it.md">🇮🇹 Italiano</a>
-<a href="README.so.md">🇸🇴 Soomaali</a>
-<a href="README.ar.md">🇸🇦 العربية</a>
+  <a href="https://github.com/memvid/memvid/stargazers"><img src="https://img.shields.io/github/stars/memvid/memvid?style=flat-square&logo=github" alt="Stars" /></a>
+  <a href="https://github.com/memvid/memvid/network/members"><img src="https://img.shields.io/github/forks/memvid/memvid?style=flat-square&logo=github" alt="Forks" /></a>
+  <a href="https://github.com/memvid/memvid/issues"><img src="https://img.shields.io/github/issues/memvid/memvid?style=flat-square&logo=github" alt="Issues" /></a>
+  <a href="https://discord.gg/2mynS7fcK7"><img src="https://img.shields.io/discord/1442910055233224745?style=flat-square&logo=discord&label=discord" alt="Discord" /></a>
 </p>
+
+<p align="center">
+    <a href="https://trendshift.io/repositories/17293" target="_blank"><img src="https://trendshift.io/api/badge/repositories/17293" alt="memvid%2Fmemvid | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+</p>
+<!-- BADGES:END -->
 
 # المساهمة في Memvid (الترجمة العربية)
 
@@ -16,16 +53,6 @@
 
 ذاكرة دائمة، مؤرشفة، وقابلة للنقل، دون الحاجة إلى قواعد بيانات.
 
-</p>
-
-<p align="center">
-  <a href="https://www.memvid.com">الموقع الإلكتروني</a>
-  ·
-  <a href="https://sandbox.memvid.com">تجربة البيئة التجريبية (Sandbox)</a>
-  ·
-  <a href="https://docs.memvid.com">الوثائق</a>
-  ·
-  <a href="https://github.com/memvid/memvid/discussions">المناقشات</a>
 </p>
 
 <h2 align="center">⭐️ اترك نجمة (STAR) لدعم المشروع ⭐️</h2>

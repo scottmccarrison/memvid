@@ -26,9 +26,9 @@
 //!
 //! # Strategies
 //!
-//! - **AbsoluteThreshold**: Stop when score drops below a fixed value (e.g., 0.7)
-//! - **RelativeThreshold**: Stop when score drops below X% of the top score
-//! - **ScoreCliff**: Stop when score drops by more than X% from previous result
+//! - **`AbsoluteThreshold`**: Stop when score drops below a fixed value (e.g., 0.7)
+//! - **`RelativeThreshold`**: Stop when score drops below X% of the top score
+//! - **`ScoreCliff`**: Stop when score drops by more than X% from previous result
 //! - **Elbow**: Automatically detect the "knee" in the score curve
 //! - **Combined**: Use multiple strategies together
 
@@ -37,7 +37,7 @@ use serde::{Deserialize, Serialize};
 /// Configuration for adaptive retrieval.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdaptiveConfig {
-    /// Enable adaptive retrieval (if false, uses fixed top_k).
+    /// Enable adaptive retrieval (if false, uses fixed `top_k`).
     #[serde(default = "default_enabled")]
     pub enabled: bool,
 
@@ -86,6 +86,7 @@ impl Default for AdaptiveConfig {
 
 impl AdaptiveConfig {
     /// Create a config with absolute threshold strategy.
+    #[must_use]
     pub fn with_absolute_threshold(min_score: f32) -> Self {
         Self {
             strategy: CutoffStrategy::AbsoluteThreshold { min_score },
@@ -94,6 +95,7 @@ impl AdaptiveConfig {
     }
 
     /// Create a config with relative threshold strategy.
+    #[must_use]
     pub fn with_relative_threshold(min_ratio: f32) -> Self {
         Self {
             strategy: CutoffStrategy::RelativeThreshold { min_ratio },
@@ -102,6 +104,7 @@ impl AdaptiveConfig {
     }
 
     /// Create a config with score cliff detection.
+    #[must_use]
     pub fn with_score_cliff(max_drop_ratio: f32) -> Self {
         Self {
             strategy: CutoffStrategy::ScoreCliff { max_drop_ratio },
@@ -110,6 +113,7 @@ impl AdaptiveConfig {
     }
 
     /// Create a config with automatic elbow detection.
+    #[must_use]
     pub fn with_elbow_detection() -> Self {
         Self {
             strategy: CutoffStrategy::Elbow { sensitivity: 1.0 },
@@ -118,6 +122,7 @@ impl AdaptiveConfig {
     }
 
     /// Create a combined strategy (recommended for production).
+    #[must_use]
     pub fn combined(min_ratio: f32, max_drop: f32, min_score: f32) -> Self {
         Self {
             strategy: CutoffStrategy::Combined {
@@ -137,7 +142,7 @@ pub enum CutoffStrategy {
     /// Stop when score drops below a fixed threshold.
     ///
     /// Good for: Well-calibrated scores where you know what "relevant" means.
-    /// Example: min_score=0.7 means only results with score >= 0.7 are included.
+    /// Example: `min_score=0.7` means only results with score >= 0.7 are included.
     AbsoluteThreshold {
         /// Minimum acceptable score (0.0-1.0 for normalized, varies otherwise).
         min_score: f32,
@@ -146,7 +151,7 @@ pub enum CutoffStrategy {
     /// Stop when score drops below X% of the top result's score.
     ///
     /// Good for: Relative relevancy where top result sets the baseline.
-    /// Example: min_ratio=0.5 means include results with score >= 50% of top score.
+    /// Example: `min_ratio=0.5` means include results with score >= 50% of top score.
     RelativeThreshold {
         /// Minimum ratio vs top score (0.0-1.0).
         min_ratio: f32,
@@ -155,7 +160,7 @@ pub enum CutoffStrategy {
     /// Stop when score drops by more than X% from the previous result.
     ///
     /// Good for: Detecting natural breaks in relevancy.
-    /// Example: max_drop_ratio=0.3 stops when score drops 30% from previous.
+    /// Example: `max_drop_ratio=0.3` stops when score drops 30% from previous.
     ScoreCliff {
         /// Maximum allowed drop ratio between consecutive results (0.0-1.0).
         max_drop_ratio: f32,
@@ -231,6 +236,7 @@ pub struct AdaptiveStats {
 
 impl<T> AdaptiveResult<T> {
     /// Create an empty result.
+    #[must_use]
     pub fn empty() -> Self {
         Self {
             results: Vec::new(),
@@ -287,7 +293,7 @@ pub struct EmbeddingQualityStats {
     /// Estimated number of distinct clusters (based on similarity gaps).
     pub estimated_clusters: usize,
 
-    /// Recommended min_relevancy threshold based on the distribution.
+    /// Recommended `min_relevancy` threshold based on the distribution.
     pub recommended_threshold: f32,
 
     /// Quality assessment: "excellent", "good", "fair", "poor".
@@ -325,7 +331,7 @@ pub fn compute_embedding_quality(embeddings: &[(u64, Vec<f32>)]) -> EmbeddingQua
     }
 
     let vector_count = embeddings.len();
-    let dimension = embeddings.first().map(|(_, v)| v.len()).unwrap_or(0);
+    let dimension = embeddings.first().map_or(0, |(_, v)| v.len());
 
     if vector_count < 2 {
         return EmbeddingQualityStats {
@@ -359,9 +365,9 @@ pub fn compute_embedding_quality(embeddings: &[(u64, Vec<f32>)]) -> EmbeddingQua
         while similarities.len() < max_pairs {
             // Simple LCG random
             rng_state = rng_state.wrapping_mul(6364136223846793005).wrapping_add(1);
-            let i = (rng_state as usize) % vector_count;
+            let i = usize::try_from(rng_state % (vector_count as u64)).unwrap_or(0);
             rng_state = rng_state.wrapping_mul(6364136223846793005).wrapping_add(1);
-            let j = (rng_state as usize) % vector_count;
+            let j = usize::try_from(rng_state % (vector_count as u64)).unwrap_or(0);
 
             if i != j {
                 let pair = if i < j { (i, j) } else { (j, i) };
@@ -386,10 +392,10 @@ pub fn compute_embedding_quality(embeddings: &[(u64, Vec<f32>)]) -> EmbeddingQua
     // Compute statistics
     let n = similarities.len() as f32;
     let avg_similarity: f32 = similarities.iter().sum::<f32>() / n;
-    let min_similarity = similarities.iter().cloned().fold(f32::INFINITY, f32::min);
+    let min_similarity = similarities.iter().copied().fold(f32::INFINITY, f32::min);
     let max_similarity = similarities
         .iter()
-        .cloned()
+        .copied()
         .fold(f32::NEG_INFINITY, f32::max);
 
     let variance: f32 = similarities
@@ -492,8 +498,9 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 
 /// Find the adaptive cutoff point for a list of scores.
 ///
-/// Returns (cutoff_index, triggered_by_strategy).
-/// Results at indices 0..cutoff_index should be included.
+/// Returns (`cutoff_index`, `triggered_by_strategy`).
+/// Results at indices `0..cutoff_index` should be included.
+#[must_use]
 pub fn find_adaptive_cutoff(scores: &[f32], config: &AdaptiveConfig) -> (usize, String) {
     if scores.is_empty() {
         return (0, "no_results".to_string());
@@ -551,8 +558,8 @@ pub fn normalize_scores(scores: &[f32]) -> Vec<f32> {
         return Vec::new();
     }
 
-    let max_score = scores.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-    let min_score = scores.iter().cloned().fold(f32::INFINITY, f32::min);
+    let max_score = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let min_score = scores.iter().copied().fold(f32::INFINITY, f32::min);
     let range = max_score - min_score;
 
     if range < f32::EPSILON {
@@ -751,7 +758,7 @@ mod tests {
 
         // Should stop either at relative threshold (50% of 0.95 = 0.475)
         // or at cliff (0.75 -> 0.40 is ~47% drop)
-        assert!(cutoff >= 4 && cutoff <= 6);
+        assert!((4..=6).contains(&cutoff));
     }
 
     #[test]

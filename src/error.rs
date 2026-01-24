@@ -64,7 +64,7 @@ pub enum MemvidError {
     Lock(String),
 
     #[error(transparent)]
-    Locked(#[from] LockedError),
+    Locked(#[from] Box<LockedError>),
 
     #[error("Checksum mismatch while validating {context}")]
     ChecksumMismatch { context: &'static str },

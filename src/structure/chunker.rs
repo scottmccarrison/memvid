@@ -40,11 +40,13 @@ impl Default for StructuralChunker {
 
 impl StructuralChunker {
     /// Create a new chunker with the given options.
+    #[must_use]
     pub fn new(options: ChunkingOptions) -> Self {
         Self { options }
     }
 
     /// Create a chunker with default options and custom max chars.
+    #[must_use]
     pub fn with_max_chars(max_chars: usize) -> Self {
         Self {
             options: ChunkingOptions {
@@ -55,6 +57,7 @@ impl StructuralChunker {
     }
 
     /// Chunk a structured document.
+    #[must_use]
     pub fn chunk(&self, doc: &StructuredDocument) -> ChunkingResult {
         let mut result = ChunkingResult::empty();
         let mut current_text = String::new();
@@ -295,7 +298,7 @@ impl StructuralChunker {
                 }
 
                 let max_rows_per_chunk = self.calculate_rows_per_chunk(table, header_chars);
-                let total_parts = (data_rows.len() + max_rows_per_chunk - 1) / max_rows_per_chunk;
+                let total_parts = data_rows.len().div_ceil(max_rows_per_chunk);
 
                 let mut part = 1;
                 let mut row_idx = 0;
@@ -328,7 +331,7 @@ impl StructuralChunker {
                             index,
                             &table.id,
                             part as u32,
-                            total_parts as u32,
+                            u32::try_from(total_parts).unwrap_or(0),
                             &header_text,
                             char_start,
                             char_end,
@@ -407,7 +410,7 @@ impl StructuralChunker {
                     element_id: None,
                     part: None,
                     total_parts: None,
-                    context: language.map(|s| s.to_string()),
+                    context: language.map(std::string::ToString::to_string),
                     char_start,
                     char_end,
                 });
@@ -426,7 +429,7 @@ impl StructuralChunker {
                         element_id: None,
                         part: None,
                         total_parts: None,
-                        context: language.map(|s| s.to_string()),
+                        context: language.map(std::string::ToString::to_string),
                         char_start,
                         char_end,
                     });
@@ -523,8 +526,8 @@ impl StructuralChunker {
                     index,
                     element_id: None,
                     part: Some(1),
-                    total_parts: Some(total_parts as u32),
-                    context: language.map(|s| s.to_string()),
+                    total_parts: Some(u32::try_from(total_parts).unwrap_or(0)),
+                    context: language.map(std::string::ToString::to_string),
                     char_start,
                     char_end,
                 });
@@ -534,9 +537,9 @@ impl StructuralChunker {
                     chunk_type: ChunkType::CodeBlockContinuation,
                     index,
                     element_id: None,
-                    part: Some((i + 1) as u32),
-                    total_parts: Some(total_parts as u32),
-                    context: language.map(|s| s.to_string()),
+                    part: Some(u32::try_from(i + 1).unwrap_or(0)),
+                    total_parts: Some(u32::try_from(total_parts).unwrap_or(0)),
+                    context: language.map(std::string::ToString::to_string),
                     char_start,
                     char_end,
                 });
@@ -614,9 +617,9 @@ impl StructuralChunker {
                 chunk_type,
                 index,
                 element_id: None,
-                part: Some((i + 1) as u32),
-                total_parts: Some(total_parts as u32),
-                context: language.map(|s| s.to_string()),
+                part: Some(u32::try_from(i + 1).unwrap_or(0)),
+                total_parts: Some(u32::try_from(total_parts).unwrap_or(0)),
+                context: language.map(std::string::ToString::to_string),
                 char_start,
                 char_end,
             });
@@ -625,11 +628,13 @@ impl StructuralChunker {
 }
 
 /// Convenience function to chunk text with default options.
+#[must_use]
 pub fn chunk_structured(doc: &StructuredDocument) -> ChunkingResult {
     StructuralChunker::default().chunk(doc)
 }
 
 /// Convenience function to chunk text with custom max chars.
+#[must_use]
 pub fn chunk_structured_with_max(doc: &StructuredDocument, max_chars: usize) -> ChunkingResult {
     StructuralChunker::with_max_chars(max_chars).chunk(doc)
 }
@@ -651,14 +656,14 @@ mod tests {
 
     #[test]
     fn test_table_preserved_when_small() {
-        let text = r#"Introduction.
+        let text = r"Introduction.
 
 | Name | Age |
 |------|-----|
 | Alice | 30 |
 | Bob | 25 |
 
-Conclusion."#;
+Conclusion.";
 
         let doc = detect_structure(text);
         let result = chunk_structured(&doc);
@@ -683,12 +688,12 @@ Conclusion."#;
         }
 
         let text = format!(
-            r#"Introduction.
+            r"Introduction.
 
 | Column A | Column B | Column C |
 |----------|----------|----------|
 {}
-Conclusion."#,
+Conclusion.",
             rows
         );
 
@@ -776,10 +781,10 @@ All done."#;
 
     #[test]
     fn test_table_header_formatting() {
-        let text = r#"| Col1 | Col2 | Col3 |
+        let text = r"| Col1 | Col2 | Col3 |
 |------|------|------|
 | A1   | A2   | A3   |
-| B1   | B2   | B3   |"#;
+| B1   | B2   | B3   |";
 
         let doc = detect_structure(text);
         let table = doc.tables().next().unwrap();
@@ -797,9 +802,9 @@ All done."#;
         }
 
         let text = format!(
-            r#"| Header1 | Header2 |
+            r"| Header1 | Header2 |
 |---------|---------|
-{}"#,
+{}",
             rows
         );
 
@@ -820,7 +825,7 @@ All done."#;
 
     #[test]
     fn test_chunking_result_stats() {
-        let text = r#"| A | B |
+        let text = r"| A | B |
 |---|---|
 | 1 | 2 |
 
@@ -830,7 +835,7 @@ x = 1
 
 | C | D |
 |---|---|
-| 3 | 4 |"#;
+| 3 | 4 |";
 
         let doc = detect_structure(text);
         let result = chunk_structured(&doc);

@@ -76,9 +76,18 @@ git commit -m "docs: update README examples"
 
 - Follow standard Rust idioms and conventions
 - Use `rustfmt` for formatting (`cargo fmt`)
-- Use `clippy` for linting (`cargo clippy`)
+- Use `clippy` for linting (`cargo clippy`). We maintain a **zero-warning policy**.
 - Prefer explicit types for public APIs
 - Use `thiserror` for error definitions
+
+### Linting & Safety
+
+We enforce strict linting to ensure safety and portability:
+
+1.  **Zero Warnings**: CI will fail on any warning. Run `cargo clippy --workspace --all-targets -- -D warnings` locally.
+2.  **No Panics**: `unwrap()` and `expect()` are **denied** in library code. Use `Result` propagation (`?`) or graceful error handling. They are allowed in `tests/`.
+3.  **No Truncation**: `cast_possible_truncation` is denied. Use `try_from` when converting `u64` to `usize`/`u32`.
+4.  **Exceptions**: We allow pragmatic lints (e.g., `cast_precision_loss` for ML math) in `src/lib.rs`. Do not add global `#![allow]` without discussion.
 
 ### Documentation
 

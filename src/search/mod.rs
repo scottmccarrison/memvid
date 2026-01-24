@@ -61,20 +61,17 @@ impl FieldTerm {
                 .frame
                 .uri
                 .as_deref()
-                .map(|uri| uri.eq_ignore_ascii_case(value))
-                .unwrap_or(false),
+                .is_some_and(|uri| uri.eq_ignore_ascii_case(value)),
             FieldTerm::Scope(prefix) => ctx
                 .frame
                 .uri
                 .as_deref()
-                .map(|uri| uri.starts_with(prefix))
-                .unwrap_or(false),
+                .is_some_and(|uri| uri.starts_with(prefix)),
             FieldTerm::Track(track) => ctx
                 .frame
                 .track
                 .as_deref()
-                .map(|value| value.eq_ignore_ascii_case(track))
-                .unwrap_or(false),
+                .is_some_and(|value| value.eq_ignore_ascii_case(track)),
             FieldTerm::Tag(tag) => ctx
                 .frame
                 .tags
@@ -206,7 +203,7 @@ impl Expr {
     fn contains_field_terms(&self) -> bool {
         match self {
             Expr::Or(children) | Expr::And(children) => {
-                children.iter().any(|child| child.contains_field_terms())
+                children.iter().any(parser::Expr::contains_field_terms)
             }
             Expr::Not(child) => child.contains_field_terms(),
             Expr::Term(term) => term.contains_field_terms(),

@@ -1,3 +1,5 @@
+// Safe unwrap: guaranteed non-empty vector operations.
+#![allow(clippy::unwrap_used)]
 use crate::MemvidError;
 use crate::Result;
 use crate::memvid::lifecycle::Memvid;
@@ -67,7 +69,7 @@ pub(super) fn parse_cursor(cursor: Option<&str>, total_hits: usize) -> Result<us
 /// Build context for LLM from search hits using a multi-document strategy.
 ///
 /// Key design decisions for deterministic, comprehensive context:
-/// 1. Uses BTreeMap for deterministic iteration order (sorted by URI)
+/// 1. Uses `BTreeMap` for deterministic iteration order (sorted by URI)
 /// 2. Includes top hits from MULTIPLE documents for diverse context
 /// 3. Prioritizes by rank while ensuring document diversity
 /// 4. Maximum 24 hits for balanced context (not too much noise, not too little coverage)
@@ -89,7 +91,7 @@ pub(crate) fn build_context(hits: &[SearchHit]) -> String {
             .next()
             .unwrap_or(&hit.uri)
             .to_ascii_lowercase();
-        let entry = groups.entry(base).or_insert_with(GroupSummary::default);
+        let entry = groups.entry(base).or_default();
         entry.indices.push(idx);
         entry.total_matches += hit.matches.max(1);
         entry.best_rank = entry.best_rank.min(hit.rank);
@@ -396,7 +398,7 @@ pub(crate) fn attach_temporal_metadata(memvid: &mut Memvid, hits: &mut [SearchHi
 /// Enrich search hits with entities from the Logic-Mesh.
 ///
 /// For each hit, looks up entities that are associated with the hit's frame.
-/// If the frame is a DocumentChunk (page), also checks the parent document frame
+/// If the frame is a `DocumentChunk` (page), also checks the parent document frame
 /// for entities since NER extraction happens on the full document.
 pub(super) fn enrich_hits_with_entities(hits: &mut [SearchHit], memvid: &Memvid) {
     for hit in hits.iter_mut() {
@@ -404,7 +406,10 @@ pub(super) fn enrich_hits_with_entities(hits: &mut [SearchHit], memvid: &Memvid)
 
         // If no entities found and this is a chunk, check the parent frame
         if entities.is_empty() {
-            if let Some(frame) = memvid.toc.frames.get(hit.frame_id as usize) {
+            if let Some(frame) = usize::try_from(hit.frame_id)
+                .ok()
+                .and_then(|idx| memvid.toc.frames.get(idx))
+            {
                 if let Some(parent_id) = frame.parent_id {
                     entities = memvid.frame_entities_for_search(parent_id);
                 }

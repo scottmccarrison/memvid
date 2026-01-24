@@ -45,11 +45,12 @@ pub(super) fn search_with_lex_fallback(
                 continue;
             }
         }
-        let frame_meta = memvid.toc.frames.get(matched.frame_id as usize).ok_or(
-            MemvidError::InvalidTimeIndex {
+        let frame_meta = usize::try_from(matched.frame_id)
+            .ok()
+            .and_then(|idx| memvid.toc.frames.get(idx))
+            .ok_or(MemvidError::InvalidTimeIndex {
                 reason: "frame id out of range".into(),
-            },
-        )?;
+            })?;
         let content_lower = matched.content.to_ascii_lowercase();
         let ctx = EvaluationContext {
             frame: frame_meta,
@@ -88,16 +89,21 @@ pub(super) fn search_with_lex_fallback(
         let frame_meta = memvid
             .toc
             .frames
-            .get(matched.frame_id as usize)
+            .get(usize::try_from(matched.frame_id).unwrap_or(usize::MAX))
             .cloned()
             .ok_or(MemvidError::InvalidTimeIndex {
                 reason: "frame id out of range".into(),
             })?;
         let canonical = memvid.frame_content(&frame_meta)?;
-        let canonical_limit = frame_meta
-            .canonical_length
-            .map(|len| len as usize)
-            .unwrap_or_else(|| canonical.len());
+        let canonical_limit = frame_meta.canonical_length.map_or_else(
+            || canonical.len(),
+            |len| {
+                // Safe: canonical length is reasonably small string length
+                #[allow(clippy::cast_possible_truncation)]
+                let l = len as usize;
+                l
+            },
+        );
         let canonical_len = canonical.len();
         let effective_len = canonical_limit.min(canonical_len);
         let uri = matched

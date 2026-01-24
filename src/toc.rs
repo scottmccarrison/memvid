@@ -10,6 +10,7 @@ use crate::{
     },
 };
 
+#[allow(clippy::cast_possible_truncation)]
 fn canonical_config() -> impl bincode::config::Config {
     bincode::config::standard()
         .with_fixed_int_encoding()
@@ -17,7 +18,7 @@ fn canonical_config() -> impl bincode::config::Config {
         .with_limit::<{ crate::MAX_INDEX_BYTES as usize }>()
 }
 
-/// Legacy TOC format without memories_track field (pre-v2.0.105).
+/// Legacy TOC format without `memories_track` field (pre-v2.0.105).
 /// Used for backwards compatibility with older .mv2 files.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct LegacyTocV1 {
@@ -35,7 +36,7 @@ struct LegacyTocV1 {
     pub toc_checksum: [u8; 32],
 }
 
-/// Legacy TOC format with memories_track but without replay_manifest (pre-v2.0.116).
+/// Legacy TOC format with `memories_track` but without `replay_manifest` (pre-v2.0.116).
 /// Used for backwards compatibility with files created before replay feature.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct LegacyTocV2 {
@@ -111,30 +112,26 @@ impl Toc {
     /// Supports current format and legacy formats (pre-replay_manifest, pre-memories_track).
     pub fn decode(bytes: &[u8]) -> Result<Self> {
         // Try current format first (with replay_manifest)
-        match decode_from_slice::<Toc, _>(bytes, canonical_config()) {
-            Ok((toc, bytes_read)) => {
-                if bytes_read != bytes.len() {
-                    return Err(MemvidError::InvalidToc {
-                        reason: "unexpected trailing bytes".into(),
-                    });
-                }
-                return Ok(toc);
+        if let Ok((toc, bytes_read)) = decode_from_slice::<Toc, _>(bytes, canonical_config()) {
+            if bytes_read != bytes.len() {
+                return Err(MemvidError::InvalidToc {
+                    reason: "unexpected trailing bytes".into(),
+                });
             }
-            Err(_) => {}
+            return Ok(toc);
         }
 
         // Try V2 format (with memories_track/logic_mesh, without replay_manifest)
-        match decode_from_slice::<LegacyTocV2, _>(bytes, canonical_config()) {
-            Ok((legacy, bytes_read)) => {
-                if bytes_read != bytes.len() {
-                    return Err(MemvidError::InvalidToc {
-                        reason: "unexpected trailing bytes in V2 format".into(),
-                    });
-                }
-                tracing::debug!("Decoded TOC V2 format (pre-replay_manifest)");
-                return Ok(legacy.into());
+        if let Ok((legacy, bytes_read)) =
+            decode_from_slice::<LegacyTocV2, _>(bytes, canonical_config())
+        {
+            if bytes_read != bytes.len() {
+                return Err(MemvidError::InvalidToc {
+                    reason: "unexpected trailing bytes in V2 format".into(),
+                });
             }
-            Err(_) => {}
+            tracing::debug!("Decoded TOC V2 format (pre-replay_manifest)");
+            return Ok(legacy.into());
         }
 
         // Try V1 format (without memories_track/logic_mesh/replay_manifest)
@@ -146,7 +143,7 @@ impl Toc {
                     });
                 }
                 tracing::debug!("Decoded TOC V1 format (pre-memories_track)");
-                return Ok(legacy.into());
+                Ok(legacy.into())
             }
             Err(e) => Err(e.into()),
         }
@@ -191,6 +188,7 @@ impl LegacyTocV2 {
 
 impl Toc {
     /// Computes the BLAKE3 checksum used for the TOC integrity field.
+    #[must_use]
     pub fn calculate_checksum(bytes: &[u8]) -> [u8; 32] {
         let mut hasher = Hasher::new();
         hasher.update(bytes);

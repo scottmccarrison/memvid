@@ -4,14 +4,14 @@
 //! fast candidate filtering before expensive BM25/vector reranking.
 //!
 //! Key components:
-//! - **SimHash**: 64-bit locality-sensitive hash for approximate cosine similarity
+//! - **`SimHash`**: 64-bit locality-sensitive hash for approximate cosine similarity
 //! - **Term Filter**: Compact bitset for fast query term overlap detection
 //! - **Top Terms**: Hashed IDs of highest-weight terms for direct matching
 //!
 //! References:
-//! - Charikar 2002: SimHash for cosine similarity estimation
+//! - Charikar 2002: `SimHash` for cosine similarity estimation
 //! - Manku et al. 2007: Web-scale near-duplicate detection
-//! - RocksDB block filters: LSM-style membership filtering
+//! - `RocksDB` block filters: LSM-style membership filtering
 
 use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -23,6 +23,41 @@ use crate::error::{MemvidError, Result};
 use crate::types::FrameId;
 
 // ============================================================================
+// Safe Byte Extraction Helpers
+// ============================================================================
+
+/// Extract a fixed-size array from a byte slice. Panics if slice is too short.
+/// Only use this when the input buffer size is compile-time guaranteed.
+#[inline]
+fn read_u16_le(buf: &[u8], offset: usize) -> u16 {
+    u16::from_le_bytes([buf[offset], buf[offset + 1]])
+}
+
+#[inline]
+fn read_u32_le(buf: &[u8], offset: usize) -> u32 {
+    u32::from_le_bytes([
+        buf[offset],
+        buf[offset + 1],
+        buf[offset + 2],
+        buf[offset + 3],
+    ])
+}
+
+#[inline]
+fn read_u64_le(buf: &[u8], offset: usize) -> u64 {
+    u64::from_le_bytes([
+        buf[offset],
+        buf[offset + 1],
+        buf[offset + 2],
+        buf[offset + 3],
+        buf[offset + 4],
+        buf[offset + 5],
+        buf[offset + 6],
+        buf[offset + 7],
+    ])
+}
+
+// ============================================================================
 // Constants
 // ============================================================================
 
@@ -32,7 +67,7 @@ pub const SKETCH_TRACK_MAGIC: [u8; 4] = *b"MVSK";
 /// Current version of the sketch track format.
 pub const SKETCH_TRACK_VERSION: u16 = 1;
 
-/// Default Hamming distance threshold for SimHash similarity (out of 64 bits).
+/// Default Hamming distance threshold for `SimHash` similarity (out of 64 bits).
 /// Lower = stricter matching. 8-12 is typical for near-duplicate detection.
 pub const DEFAULT_HAMMING_THRESHOLD: u32 = 10;
 
@@ -70,19 +105,15 @@ pub const ENTRY_SIZE_LARGE: usize = 96;
 /// Sketch size variant determining storage overhead and precision.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum SketchVariant {
     /// Small: 32 bytes/frame (128-bit filter, 2 top terms)
+    #[default]
     Small = 0,
     /// Medium: 64 bytes/frame (256-bit filter, 4 top terms)
     Medium = 1,
-    /// Large: 96 bytes/frame (512-bit filter, 6 top terms, optional MinHash)
+    /// Large: 96 bytes/frame (512-bit filter, 6 top terms, optional `MinHash`)
     Large = 2,
-}
-
-impl Default for SketchVariant {
-    fn default() -> Self {
-        SketchVariant::Small
-    }
 }
 
 impl SketchVariant {
@@ -133,13 +164,13 @@ impl SketchVariant {
 pub struct SketchFlags(u16);
 
 impl SketchFlags {
-    /// Entry has valid SimHash.
+    /// Entry has valid `SimHash`.
     pub const HAS_SIMHASH: u16 = 1 << 0;
     /// Entry has valid term filter.
     pub const HAS_TERM_FILTER: u16 = 1 << 1;
     /// Entry has valid top terms.
     pub const HAS_TOP_TERMS: u16 = 1 << 2;
-    /// Entry has MinHash (Large variant only).
+    /// Entry has `MinHash` (Large variant only).
     pub const HAS_MINHASH: u16 = 1 << 3;
     /// Entry was generated from short text (<50 tokens).
     pub const SHORT_TEXT: u16 = 1 << 4;
@@ -182,11 +213,11 @@ impl SketchFlags {
 ///
 /// Layout:
 /// - simhash: u64 (8 bytes)
-/// - term_filter: [u8; 16] (16 bytes) - 128-bit Bloom-like filter
-/// - top_terms: [u32; 2] (8 bytes) - hashed IDs of top 2 terms
+/// - `term_filter`: [u8; 16] (16 bytes) - 128-bit Bloom-like filter
+/// - `top_terms`: [u32; 2] (8 bytes) - hashed IDs of top 2 terms
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SketchEntrySmall {
-    /// SimHash fingerprint (64-bit LSH for cosine similarity).
+    /// `SimHash` fingerprint (64-bit LSH for cosine similarity).
     pub simhash: u64,
     /// Compact term membership filter (128-bit).
     pub term_filter: [u8; TERM_FILTER_SIZE_SMALL],
@@ -219,13 +250,10 @@ impl SketchEntrySmall {
     /// Deserialize from bytes.
     #[must_use]
     pub fn from_bytes(buf: &[u8; ENTRY_SIZE_SMALL]) -> Self {
-        let simhash = u64::from_le_bytes(buf[0..8].try_into().unwrap());
+        let simhash = read_u64_le(buf, 0);
         let mut term_filter = [0u8; TERM_FILTER_SIZE_SMALL];
         term_filter.copy_from_slice(&buf[8..24]);
-        let top_terms = [
-            u32::from_le_bytes(buf[24..28].try_into().unwrap()),
-            u32::from_le_bytes(buf[28..32].try_into().unwrap()),
-        ];
+        let top_terms = [read_u32_le(buf, 24), read_u32_le(buf, 28)];
         Self {
             simhash,
             term_filter,
@@ -242,15 +270,15 @@ impl SketchEntrySmall {
 ///
 /// Layout:
 /// - simhash: u64 (8 bytes)
-/// - term_filter: [u8; 32] (32 bytes) - 256-bit filter
-/// - top_terms: [u32; 4] (16 bytes) - hashed IDs of top 4 terms
-/// - term_weight_sum: u16 (2 bytes)
+/// - `term_filter`: [u8; 32] (32 bytes) - 256-bit filter
+/// - `top_terms`: [u32; 4] (16 bytes) - hashed IDs of top 4 terms
+/// - `term_weight_sum`: u16 (2 bytes)
 /// - flags: u16 (2 bytes)
-/// - length_hint: u16 (2 bytes) - token count bucket
+/// - `length_hint`: u16 (2 bytes) - token count bucket
 /// - reserved: u16 (2 bytes)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SketchEntryMedium {
-    /// SimHash fingerprint.
+    /// `SimHash` fingerprint.
     pub simhash: u64,
     /// Compact term membership filter (256-bit).
     pub term_filter: [u8; TERM_FILTER_SIZE_MEDIUM],
@@ -314,7 +342,7 @@ impl SketchEntryMedium {
     pub fn from_bytes(buf: &[u8; ENTRY_SIZE_MEDIUM]) -> Self {
         let mut offset = 0;
 
-        let simhash = u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap());
+        let simhash = read_u64_le(buf, offset);
         offset += 8;
 
         let mut term_filter = [0u8; TERM_FILTER_SIZE_MEDIUM];
@@ -322,18 +350,18 @@ impl SketchEntryMedium {
         offset += TERM_FILTER_SIZE_MEDIUM;
 
         let mut top_terms = [0u32; TOP_TERMS_COUNT_MEDIUM];
-        for term in &mut top_terms {
-            *term = u32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
-            offset += 4;
+        for (i, term) in top_terms.iter_mut().enumerate() {
+            *term = read_u32_le(buf, offset + i * 4);
         }
+        offset += TOP_TERMS_COUNT_MEDIUM * 4;
 
-        let term_weight_sum = u16::from_le_bytes(buf[offset..offset + 2].try_into().unwrap());
+        let term_weight_sum = read_u16_le(buf, offset);
         offset += 2;
-        let flags = u16::from_le_bytes(buf[offset..offset + 2].try_into().unwrap());
+        let flags = read_u16_le(buf, offset);
         offset += 2;
-        let length_hint = u16::from_le_bytes(buf[offset..offset + 2].try_into().unwrap());
+        let length_hint = read_u16_le(buf, offset);
         offset += 2;
-        let reserved = u16::from_le_bytes(buf[offset..offset + 2].try_into().unwrap());
+        let reserved = read_u16_le(buf, offset);
 
         Self {
             simhash,
@@ -356,7 +384,7 @@ impl SketchEntryMedium {
 pub struct SketchEntry {
     /// Frame ID this sketch belongs to.
     pub frame_id: FrameId,
-    /// SimHash fingerprint (64-bit LSH).
+    /// `SimHash` fingerprint (64-bit LSH).
     pub simhash: u64,
     /// Compact term membership filter (variable size).
     pub term_filter: Vec<u8>,
@@ -476,7 +504,7 @@ impl SketchEntry {
         }
     }
 
-    /// Compute Hamming distance between this sketch's SimHash and another.
+    /// Compute Hamming distance between this sketch's `SimHash` and another.
     #[must_use]
     pub fn hamming_distance(&self, other_simhash: u64) -> u32 {
         (self.simhash ^ other_simhash).count_ones()
@@ -507,10 +535,10 @@ impl SketchEntry {
 // SimHash Implementation
 // ============================================================================
 
-/// Compute SimHash from weighted tokens.
+/// Compute `SimHash` from weighted tokens.
 ///
-/// SimHash is a locality-sensitive hash that approximates cosine similarity.
-/// Documents with similar content will have SimHash values with small Hamming distance.
+/// `SimHash` is a locality-sensitive hash that approximates cosine similarity.
+/// Documents with similar content will have `SimHash` values with small Hamming distance.
 ///
 /// Algorithm:
 /// 1. For each token, compute a 64-bit hash
@@ -527,7 +555,7 @@ pub fn compute_simhash(tokens: &[(u64, i32)]) -> u64 {
     let mut v = [0i64; 64];
 
     for (token_hash, weight) in tokens {
-        let weight = *weight as i64;
+        let weight = i64::from(*weight);
         for i in 0..64 {
             if (token_hash >> i) & 1 == 1 {
                 v[i] += weight;
@@ -555,14 +583,16 @@ pub fn hash_token(token: &str) -> u64 {
     // Use BLAKE3 for determinism, take first 8 bytes as u64
     let hash = blake3::hash(token.as_bytes());
     let bytes = hash.as_bytes();
-    u64::from_le_bytes(bytes[0..8].try_into().unwrap())
+    read_u64_le(bytes, 0)
 }
 
-/// Hash a token to u32 for top_terms storage.
+/// Hash a token to u32 for `top_terms` storage.
 #[must_use]
 pub fn hash_token_u32(token: &str) -> u32 {
     let h = hash_token(token);
-    (h ^ (h >> 32)) as u32
+    #[allow(clippy::cast_possible_truncation)]
+    let res = (h ^ (h >> 32)) as u32;
+    res
 }
 
 // ============================================================================
@@ -580,9 +610,9 @@ pub fn build_term_filter(token_hashes: &[u64], filter_size_bytes: usize) -> Vec<
 
     for &hash in token_hashes {
         // Use 3 hash functions (simulated via rotation)
-        let h1 = hash as usize % filter_bits;
-        let h2 = (hash >> 16) as usize % filter_bits;
-        let h3 = (hash >> 32) as usize % filter_bits;
+        let h1 = usize::try_from(hash % (filter_bits as u64)).unwrap_or(0);
+        let h2 = usize::try_from((hash >> 16) % (filter_bits as u64)).unwrap_or(0);
+        let h3 = usize::try_from((hash >> 32) % (filter_bits as u64)).unwrap_or(0);
 
         filter[h1 / 8] |= 1 << (h1 % 8);
         filter[h2 / 8] |= 1 << (h2 % 8);
@@ -596,9 +626,9 @@ pub fn build_term_filter(token_hashes: &[u64], filter_size_bytes: usize) -> Vec<
 #[must_use]
 pub fn term_filter_maybe_contains(filter: &[u8], token_hash: u64) -> bool {
     let filter_bits = filter.len() * 8;
-    let h1 = token_hash as usize % filter_bits;
-    let h2 = (token_hash >> 16) as usize % filter_bits;
-    let h3 = (token_hash >> 32) as usize % filter_bits;
+    let h1 = usize::try_from(token_hash % (filter_bits as u64)).unwrap_or(0);
+    let h2 = usize::try_from((token_hash >> 16) % (filter_bits as u64)).unwrap_or(0);
+    let h3 = usize::try_from((token_hash >> 32) % (filter_bits as u64)).unwrap_or(0);
 
     (filter[h1 / 8] & (1 << (h1 % 8)) != 0)
         && (filter[h2 / 8] & (1 << (h2 % 8)) != 0)
@@ -633,7 +663,7 @@ pub fn tokenize_for_sketch(text: &str) -> Vec<String> {
 
 /// Compute token weights using TF with cap and optional IDF.
 ///
-/// Returns (token_hash, weight) pairs sorted by weight descending.
+/// Returns (`token_hash`, weight) pairs sorted by weight descending.
 #[must_use]
 pub fn compute_token_weights(
     tokens: &[String],
@@ -655,6 +685,7 @@ pub fn compute_token_weights(
                 .copied()
                 .unwrap_or(1.0)
                 .max(0.1); // Default IDF = 1.0
+            #[allow(clippy::cast_possible_truncation)]
             let weight = (capped_tf * idf * 100.0) as i32; // Scale to integer
             (hash_token(token), weight.max(1))
         })
@@ -672,7 +703,11 @@ pub fn extract_top_terms(weighted_tokens: &[(u64, i32)], k: usize) -> Vec<u32> {
     weighted_tokens
         .iter()
         .take(k)
-        .map(|(h, _)| (*h ^ (*h >> 32)) as u32)
+        .map(|(h, _)| {
+            #[allow(clippy::cast_possible_truncation)]
+            let res = (*h ^ (*h >> 32)) as u32;
+            res
+        })
         .collect()
 }
 
@@ -717,6 +752,7 @@ pub fn generate_sketch(
         .sum();
 
     // Length hint: bucket token count (0-255 = 0-2550 tokens in steps of 10)
+    #[allow(clippy::cast_possible_truncation)]
     let length_hint = ((token_count / 10).min(255)) as u16;
 
     let mut flags = SketchFlags::all();
@@ -724,12 +760,15 @@ pub fn generate_sketch(
         flags.set(SketchFlags::SHORT_TEXT);
     }
 
+    #[allow(clippy::cast_possible_truncation)]
+    let term_weight_sum = term_weight_sum.min(u32::from(u16::MAX)) as u16;
+
     SketchEntry {
         frame_id,
         simhash,
         term_filter,
         top_terms,
-        term_weight_sum: term_weight_sum.min(u16::MAX as u32) as u16,
+        term_weight_sum,
         flags,
         length_hint,
     }
@@ -742,7 +781,7 @@ pub fn generate_sketch(
 /// Sketch generated from a query for candidate matching.
 #[derive(Debug, Clone)]
 pub struct QuerySketch {
-    /// SimHash of the query.
+    /// `SimHash` of the query.
     pub simhash: u64,
     /// Term filter for the query.
     pub term_filter: Vec<u8>,
@@ -812,7 +851,7 @@ impl QuerySketch {
 
         // Length compatibility (penalize very different lengths)
         let query_len_bucket = ((self.token_count / 10).min(255)) as f32;
-        let entry_len_bucket = entry.length_hint as f32;
+        let entry_len_bucket = f32::from(entry.length_hint);
         let len_diff = (query_len_bucket - entry_len_bucket).abs();
         let len_score = 1.0 / (1.0 + len_diff * 0.1);
 
@@ -889,7 +928,7 @@ impl SketchTrack {
 
     /// Find candidate frames matching a query.
     ///
-    /// Returns (frame_id, score) pairs sorted by score descending.
+    /// Returns (`frame_id`, score) pairs sorted by score descending.
     #[must_use]
     pub fn find_candidates(
         &self,
@@ -976,10 +1015,13 @@ impl SketchTrackHeader {
     /// Create a new header.
     #[must_use]
     pub fn new(variant: SketchVariant, entry_count: u64) -> Self {
+        #[allow(clippy::cast_possible_truncation)]
+        let entry_size = variant.entry_size() as u16;
+
         Self {
             magic: SKETCH_TRACK_MAGIC,
             version: SKETCH_TRACK_VERSION,
-            entry_size: variant.entry_size() as u16,
+            entry_size,
             entry_count,
             flags: 0,
             reserved: 0,
@@ -1012,11 +1054,11 @@ impl SketchTrackHeader {
 
         Ok(Self {
             magic,
-            version: u16::from_le_bytes(buf[4..6].try_into().unwrap()),
-            entry_size: u16::from_le_bytes(buf[6..8].try_into().unwrap()),
-            entry_count: u64::from_le_bytes(buf[8..16].try_into().unwrap()),
-            flags: u32::from_le_bytes(buf[16..20].try_into().unwrap()),
-            reserved: u32::from_le_bytes(buf[20..24].try_into().unwrap()),
+            version: read_u16_le(buf, 4),
+            entry_size: read_u16_le(buf, 6),
+            entry_count: read_u64_le(buf, 8),
+            flags: read_u32_le(buf, 16),
+            reserved: read_u32_le(buf, 20),
         })
     }
 
@@ -1037,7 +1079,7 @@ pub fn write_sketch_track<W: Write + Seek>(
     writer: &mut W,
     track: &SketchTrack,
 ) -> Result<(u64, u64, [u8; 32])> {
-    let offset = writer.seek(SeekFrom::Current(0))?;
+    let offset = writer.stream_position()?;
     let mut hasher = Hasher::new();
 
     // Write header
@@ -1062,7 +1104,7 @@ pub fn write_sketch_track<W: Write + Seek>(
         hasher.update(&entry_bytes);
     }
 
-    let end = writer.seek(SeekFrom::Current(0))?;
+    let end = writer.stream_position()?;
     let length = end - offset;
     let checksum = *hasher.finalize().as_bytes();
 
@@ -1090,20 +1132,16 @@ pub fn read_sketch_track<R: Read + Seek>(
 
     // Validate length
     let expected_length =
-        SketchTrackHeader::SIZE as u64 + header.entry_count * header.entry_size as u64;
+        SketchTrackHeader::SIZE as u64 + header.entry_count * u64::from(header.entry_size);
     if length < expected_length {
         return Err(MemvidError::InvalidSketchTrack {
-            reason: format!(
-                "Sketch track length {} less than expected {}",
-                length, expected_length
-            )
-            .into(),
+            reason: format!("Sketch track length {length} less than expected {expected_length}")
+                .into(),
         });
     }
 
     // Read entries
     let mut track = SketchTrack::new(variant);
-    let _entry_size = header.entry_size as usize;
 
     for frame_id in 0..header.entry_count {
         let entry = match variant {
@@ -1173,7 +1211,7 @@ mod tests {
 
     #[test]
     fn test_term_filter() {
-        let tokens = vec!["hello", "world", "test"];
+        let tokens = ["hello", "world", "test"];
         let hashes: Vec<u64> = tokens.iter().map(|t| hash_token(t)).collect();
         let filter = build_term_filter(&hashes, 16);
 
@@ -1279,7 +1317,7 @@ mod tests {
         // Should find at least some candidates with relaxed threshold
         // The sketch is optimized for approximate matching, not exact
         assert!(
-            !candidates.is_empty() || track.len() > 0,
+            !candidates.is_empty() || !track.is_empty(),
             "Track should have entries"
         );
     }

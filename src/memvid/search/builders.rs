@@ -96,14 +96,14 @@ impl Memvid {
                 return Ok(());
             }
 
-            let bytes = match self.read_range(manifest.bytes_offset, manifest.bytes_length) {
-                Ok(bytes) => bytes,
-                Err(_) => {
+            let bytes =
+                if let Ok(bytes) = self.read_range(manifest.bytes_offset, manifest.bytes_length) {
+                    bytes
+                } else {
                     // Don't disable lex if loading fails - keep it enabled
                     self.lex_index = None;
                     return Ok(());
-                }
-            };
+                };
             match LexIndex::decode(&bytes) {
                 Ok(mut index) => {
                     self.hydrate_lex_index_metadata(&mut index);
@@ -130,15 +130,15 @@ impl Memvid {
                 return Ok(());
             }
 
-            let bytes = match self.read_range(manifest.bytes_offset, manifest.bytes_length) {
-                Ok(bytes) => bytes,
-                Err(_) => {
+            let bytes =
+                if let Ok(bytes) = self.read_range(manifest.bytes_offset, manifest.bytes_length) {
+                    bytes
+                } else {
                     self.vec_index = None;
                     // Don't disable vec if loading fails - keep it enabled
                     // self.vec_enabled = false;
                     return Ok(());
-                }
-            };
+                };
             match catch_unwind(AssertUnwindSafe(|| VecIndex::decode(&bytes))) {
                 Ok(Ok(index)) => self.vec_index = Some(index),
                 Ok(Err(_)) | Err(_) => {
@@ -166,13 +166,13 @@ impl Memvid {
                 return Ok(());
             }
 
-            let bytes = match self.read_range(manifest.bytes_offset, manifest.bytes_length) {
-                Ok(bytes) => bytes,
-                Err(_) => {
+            let bytes =
+                if let Ok(bytes) = self.read_range(manifest.bytes_offset, manifest.bytes_length) {
+                    bytes
+                } else {
                     self.clip_index = None;
                     return Ok(());
-                }
-            };
+                };
             match catch_unwind(AssertUnwindSafe(|| ClipIndex::decode(&bytes))) {
                 Ok(Ok(index)) => self.clip_index = Some(index),
                 Ok(Err(_)) | Err(_) => {
@@ -196,6 +196,8 @@ impl Memvid {
             });
         }
         self.file.seek(SeekFrom::Start(offset))?;
+        // Safe: length is checked against MAX_INDEX_BYTES above
+        #[allow(clippy::cast_possible_truncation)]
         let mut buf = vec![0u8; length as usize];
         self.file.read_exact(&mut buf)?;
         Ok(buf)
@@ -273,7 +275,8 @@ impl Memvid {
 
     fn hydrate_lex_index_metadata(&self, index: &mut LexIndex) {
         for document in index.documents_mut() {
-            let frame_meta = self.toc.frames.get(document.frame_id as usize);
+            let frame_idx = usize::try_from(document.frame_id).ok();
+            let frame_meta = frame_idx.and_then(|idx| self.toc.frames.get(idx));
 
             if document.uri.is_none() {
                 let derived = frame_meta

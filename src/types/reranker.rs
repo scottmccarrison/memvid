@@ -28,7 +28,7 @@ use crate::error::Result;
 /// A document candidate for reranking.
 #[derive(Debug, Clone)]
 pub struct RerankerDocument {
-    /// Unique identifier for this document (usually frame_id).
+    /// Unique identifier for this document (usually `frame_id`).
     pub id: u64,
     /// The text content to be evaluated for relevance.
     pub text: String,
@@ -151,7 +151,7 @@ impl RerankerConfig {
 /// ```
 pub trait Reranker: Send + Sync {
     /// Return the reranker kind identifier.
-    fn kind(&self) -> &str;
+    fn kind(&self) -> &'static str;
 
     /// Rerank documents by relevance to the query.
     ///
@@ -223,7 +223,7 @@ impl std::str::FromStr for RerankerKind {
             "cross-encoder" | "crossencoder" | "cross_encoder" => Ok(Self::CrossEncoder),
             "llm" | "local" => Ok(Self::Llm),
             "openai" => Ok(Self::OpenAI),
-            _ => Err(format!("Unknown reranker kind: {}", s)),
+            _ => Err(format!("Unknown reranker kind: {s}")),
         }
     }
 }
@@ -235,7 +235,7 @@ mod tests {
     struct MockReranker;
 
     impl Reranker for MockReranker {
-        fn kind(&self) -> &str {
+        fn kind(&self) -> &'static str {
             "mock"
         }
 

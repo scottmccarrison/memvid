@@ -88,7 +88,7 @@ impl ExtractionRule {
             }
 
             let mut builder = MemoryCardBuilder::new()
-                .kind(self.kind.clone())
+                .kind(self.kind)
                 .entity(&entity)
                 .slot(&slot)
                 .value(&value)
@@ -96,7 +96,7 @@ impl ExtractionRule {
                 .engine("rules", "1.0.0");
 
             if let Some(polarity) = &self.polarity {
-                builder = builder.polarity(polarity.clone());
+                builder = builder.polarity(*polarity);
             }
 
             // Build with a placeholder ID (will be assigned by MemoriesTrack)
@@ -112,7 +112,7 @@ impl ExtractionRule {
     fn expand_captures(&self, template: &str, caps: &regex::Captures) -> String {
         let mut result = template.to_string();
         for i in 0..10 {
-            let placeholder = format!("${}", i);
+            let placeholder = format!("${i}");
             if let Some(m) = caps.get(i) {
                 result = result.replace(&placeholder, m.as_str());
             }
@@ -836,7 +836,7 @@ impl RulesEngine {
 }
 
 impl EnrichmentEngine for RulesEngine {
-    fn kind(&self) -> &str {
+    fn kind(&self) -> &'static str {
         "rules"
     }
 

@@ -16,16 +16,16 @@ pub const LOGIC_MESH_MAGIC: &[u8; 4] = b"MVLM";
 /// Current schema version.
 pub const LOGIC_MESH_VERSION: u16 = 1;
 
-/// Maximum nodes allowed (DoS prevention).
+/// Maximum nodes allowed (`DoS` prevention).
 pub const MAX_MESH_NODES: usize = 1_000_000;
 
-/// Maximum edges allowed (DoS prevention).
+/// Maximum edges allowed (`DoS` prevention).
 pub const MAX_MESH_EDGES: usize = 5_000_000;
 
 /// A node in the logic mesh representing an entity.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MeshNode {
-    /// Unique node ID (deterministic: hash of canonical_name + kind).
+    /// Unique node ID (deterministic: hash of `canonical_name` + kind).
     pub id: u64,
     /// Canonical entity name (lowercased, normalized).
     pub canonical_name: String,
@@ -37,12 +37,13 @@ pub struct MeshNode {
     pub confidence: u8,
     /// Frame IDs where this entity appears.
     pub frame_ids: Vec<FrameId>,
-    /// Byte spans within frames: (frame_id, byte_start, byte_len).
+    /// Byte spans within frames: (`frame_id`, `byte_start`, `byte_len`).
     pub mentions: Vec<(FrameId, u32, u16)>,
 }
 
 impl MeshNode {
     /// Create a new mesh node with computed ID.
+    #[must_use]
     pub fn new(
         canonical_name: String,
         display_name: String,
@@ -53,12 +54,15 @@ impl MeshNode {
         byte_len: u16,
     ) -> Self {
         let id = compute_node_id(&canonical_name, kind);
+        #[allow(clippy::cast_possible_truncation)]
+        let confidence = (confidence * 100.0).min(100.0) as u8;
+
         Self {
             id,
             canonical_name,
             display_name,
             kind,
-            confidence: (confidence * 100.0).min(100.0) as u8,
+            confidence,
             frame_ids: vec![frame_id],
             mentions: vec![(frame_id, byte_start, byte_len)],
         }
@@ -143,6 +147,7 @@ pub struct MeshEdge {
 
 impl MeshEdge {
     /// Create a new edge.
+    #[must_use]
     pub fn new(
         from_node: u64,
         to_node: u64,
@@ -150,11 +155,14 @@ impl MeshEdge {
         confidence: f32,
         frame_id: FrameId,
     ) -> Self {
+        #[allow(clippy::cast_possible_truncation)]
+        let confidence = (confidence * 100.0).min(100.0) as u8;
+
         Self {
             from_node,
             to_node,
             link,
-            confidence: (confidence * 100.0).min(100.0) as u8,
+            confidence,
             frame_id,
         }
     }
@@ -231,7 +239,7 @@ pub enum EdgeDirection {
     Incoming,
 }
 
-/// Result from follow() traversal.
+/// Result from `follow()` traversal.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FollowResult {
     /// Entity name found.
@@ -264,9 +272,9 @@ pub struct LogicMeshStats {
 pub struct LogicMesh {
     /// All nodes, sorted by id for determinism.
     pub nodes: Vec<MeshNode>,
-    /// All edges, sorted by (from_node, to_node, link) for determinism.
+    /// All edges, sorted by (`from_node`, `to_node`, link) for determinism.
     pub edges: Vec<MeshEdge>,
-    /// Adjacency list: node_id → [(edge_idx, direction)].
+    /// Adjacency list: `node_id` → [(`edge_idx`, direction)].
     /// Built on load, not serialized.
     #[serde(skip)]
     adjacency: HashMap<u64, Vec<(usize, EdgeDirection)>>,
@@ -370,11 +378,12 @@ impl LogicMesh {
             });
         }
 
-        let compressed_len = u64::from_le_bytes(bytes[6..14].try_into().map_err(|_| {
-            MemvidError::InvalidLogicMesh {
+        let compressed_len = usize::try_from(u64::from_le_bytes(bytes[6..14].try_into().map_err(
+            |_| MemvidError::InvalidLogicMesh {
                 reason: "invalid length header".into(),
-            }
-        })?) as usize;
+            },
+        )?))
+        .unwrap_or(0);
 
         if bytes.len() < 14 + compressed_len {
             return Err(MemvidError::InvalidLogicMesh {
@@ -446,6 +455,7 @@ impl LogicMesh {
     }
 
     /// Follow edges from a start node.
+    #[must_use]
     pub fn follow(&self, start: &str, link: &str, hops: usize) -> Vec<FollowResult> {
         let Some(start_node) = self.find_node(start) else {
             return Vec::new();

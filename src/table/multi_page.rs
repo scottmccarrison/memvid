@@ -19,6 +19,7 @@ use super::types::{ExtractedTable, TableExtractionOptions, TableQuality, TableRo
 ///
 /// # Returns
 /// Vector of tables with multi-page tables merged
+#[must_use]
 pub fn merge_multi_page_tables(
     tables: Vec<ExtractedTable>,
     options: &TableExtractionOptions,
@@ -207,7 +208,7 @@ fn merge_two_tables(mut first: ExtractedTable, second: ExtractedTable) -> Extrac
     // Renumber rows and append
     let offset = first.rows.len();
     for mut row in rows_to_add {
-        row.row_index = offset + row.row_index;
+        row.row_index += offset;
         first.rows.push(row);
     }
 
@@ -226,7 +227,7 @@ fn merge_two_tables(mut first: ExtractedTable, second: ExtractedTable) -> Extrac
 
     // Adjust quality for merged tables
     first.quality = combined_quality(first.quality, second.quality);
-    first.confidence_score = (first.confidence_score + second.confidence_score) / 2.0 - 0.05;
+    first.confidence_score = f32::midpoint(first.confidence_score, second.confidence_score) - 0.05;
     first.confidence_score = first.confidence_score.max(0.0);
 
     first
@@ -262,6 +263,7 @@ fn combined_quality(q1: TableQuality, q2: TableQuality) -> TableQuality {
 ///
 /// This is a utility function that identifies tables that might
 /// be continuations of other tables without actually merging them.
+#[must_use]
 pub fn find_continuation_candidates(
     tables: &[ExtractedTable],
     options: &TableExtractionOptions,
@@ -299,7 +301,7 @@ mod tests {
         let mut table = ExtractedTable::new(id, source);
         table.page_start = page_start;
         table.page_end = page_end;
-        table.headers = headers.iter().map(|s| s.to_string()).collect();
+        table.headers = headers.iter().map(|s| (*s).to_string()).collect();
         table.n_cols = headers.len();
         table.n_rows = n_rows;
 

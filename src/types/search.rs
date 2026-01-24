@@ -57,10 +57,10 @@ pub struct SearchRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub temporal: Option<TemporalFilter>,
     #[serde(default)]
-    /// Replay: Filter to frames with id <= as_of_frame (time-travel view).
+    /// Replay: Filter to frames with id <= `as_of_frame` (time-travel view).
     pub as_of_frame: Option<FrameId>,
     #[serde(default)]
-    /// Replay: Filter to frames with timestamp <= as_of_ts (time-travel view).
+    /// Replay: Filter to frames with timestamp <= `as_of_ts` (time-travel view).
     pub as_of_ts: Option<i64>,
     #[serde(default)]
     /// Disable sketch pre-filtering for this query.
@@ -118,7 +118,7 @@ pub struct SearchHitMetadata {
     /// Entities mentioned in this search hit (from Logic-Mesh).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub entities: Vec<SearchHitEntity>,
-    /// Custom user-defined metadata stored with the frame via PutOptions.extra_metadata.
+    /// Custom user-defined metadata stored with the frame via `PutOptions.extra_metadata`.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub extra_metadata: std::collections::BTreeMap<String, String>,
     #[cfg(feature = "temporal_track")]

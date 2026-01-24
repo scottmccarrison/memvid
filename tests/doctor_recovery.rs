@@ -60,7 +60,7 @@ fn doctor_rebuilds_tantivy_index() {
             .unwrap();
 
         assert!(
-            results.hits.len() > 0,
+            !results.hits.is_empty(),
             "Search should return results before doctor"
         );
         assert!(results.total_hits >= 10, "Should have at least 10 hits");
@@ -106,7 +106,7 @@ fn doctor_rebuilds_tantivy_index() {
             .unwrap();
 
         assert!(
-            results.hits.len() > 0,
+            !results.hits.is_empty(),
             "Search should return results after doctor rebuild"
         );
         assert_eq!(
@@ -250,7 +250,7 @@ fn open_file_with_tantivy_segments_enables_lex() {
         );
 
         let results = result.unwrap();
-        assert!(results.hits.len() > 0, "Should find the test document");
+        assert!(!results.hits.is_empty(), "Should find the test document");
     }
 }
 
@@ -389,8 +389,9 @@ fn doctor_recovers_corrupted_wal() {
     let end = start + header.wal_size.min(100) as usize;
 
     // corrupt some bytes
+    #[allow(clippy::needless_range_loop)]
     for i in start..end {
-        bytes[i] = 0xFF;
+        bytes[i] = 0xFF; // Corrupt bytes
     }
 
     write(&mv2_path, &bytes).unwrap();

@@ -101,7 +101,9 @@ impl ManifestWal {
 
         let checksum = hash(&payload);
         self.file.seek(SeekFrom::Start(self.write_offset))?;
-        self.file.write_all(&(payload.len() as u32).to_le_bytes())?;
+        // Safe: validated payload.len() <= MAX_RECORD_BYTES (4MB) on line 96
+        self.file
+            .write_all(&(u32::try_from(payload.len()).unwrap_or(u32::MAX)).to_le_bytes())?;
         self.file.write_all(checksum.as_bytes())?;
         self.file.write_all(&payload)?;
 
@@ -193,6 +195,7 @@ impl ManifestWal {
                 break;
             }
 
+            // Safe: validated payload_len <= MAX_RECORD_BYTES (4MB) on line 184
             let mut payload = vec![0u8; payload_len as usize];
             if let Err(err) = self.file.read_exact(&mut payload) {
                 if err.kind() == ErrorKind::UnexpectedEof {

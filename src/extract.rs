@@ -30,6 +30,7 @@ pub struct ExtractedDocument {
 }
 
 impl ExtractedDocument {
+    #[must_use]
     pub fn empty() -> Self {
         Self {
             text: None,
@@ -284,6 +285,7 @@ impl Default for DocumentProcessor {
 
 #[cfg(not(feature = "extractous"))]
 impl DocumentProcessor {
+    #[must_use]
     pub fn new(config: ProcessorConfig) -> Self {
         Self {
             max_length: config.max_text_chars,
@@ -559,8 +561,8 @@ const PDF_LOPDF_MAX_BYTES: usize = 64 * 1024 * 1024; // 64 MiB hard cap
 const PDF_LOPDF_MAX_PAGES: usize = 4_096;
 
 /// Try multiple PDF extractors and return the best result
-/// Returns (text, extractor_name) or None if no text found
-/// Priority: pdf_oxide (2025, best accuracy) > pdf_extract > lopdf
+/// Returns (text, `extractor_name`) or None if no text found
+/// Priority: `pdf_oxide` (2025, best accuracy) > `pdf_extract` > lopdf
 #[allow(dead_code)]
 fn pdf_text_extract_best(bytes: &[u8]) -> Result<Option<(String, &'static str)>> {
     let mut best_text: Option<String> = None;
@@ -631,7 +633,7 @@ fn pdf_text_extract_best(bytes: &[u8]) -> Result<Option<(String, &'static str)>>
                     // Use if better than current best
                     if best_text
                         .as_ref()
-                        .map_or(true, |prev| trimmed.len() > prev.len())
+                        .is_none_or(|prev| trimmed.len() > prev.len())
                     {
                         best_text = Some(trimmed.to_string());
                         best_source = "pdf_extract";
@@ -652,7 +654,7 @@ fn pdf_text_extract_best(bytes: &[u8]) -> Result<Option<(String, &'static str)>>
                 // Use lopdf result if better than previous
                 if best_text
                     .as_ref()
-                    .map_or(true, |prev| trimmed.len() > prev.len())
+                    .is_none_or(|prev| trimmed.len() > prev.len())
                 {
                     tracing::debug!(
                         target: "memvid::extract",
@@ -788,16 +790,14 @@ fn pdf_text_extract_lopdf(bytes: &[u8]) -> Result<Option<String>> {
         })?;
 
     // Try to decrypt if encrypted (empty password for unprotected PDFs)
-    if document.is_encrypted() {
-        if document.decrypt("").is_err() {
-            return Err(MemvidError::ExtractionFailed {
-                reason: "cannot decrypt password-protected PDF".into(),
-            });
-        }
+    if document.is_encrypted() && document.decrypt("").is_err() {
+        return Err(MemvidError::ExtractionFailed {
+            reason: "cannot decrypt password-protected PDF".into(),
+        });
     }
 
     // Decompress streams for better text extraction
-    let _ = document.decompress();
+    let () = document.decompress();
 
     let mut page_numbers: Vec<u32> = document.get_pages().keys().copied().collect();
     if page_numbers.is_empty() {

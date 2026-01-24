@@ -112,7 +112,7 @@ pub fn truncate_at_grapheme_boundary(s: &str, limit: usize) -> usize {
     }
 
     if end == 0 {
-        s.graphemes(true).next().map(|g| g.len()).unwrap_or(0)
+        s.graphemes(true).next().map_or(0, str::len)
     } else {
         end
     }
@@ -155,12 +155,11 @@ pub fn fix_pdf_spacing(input: &str) -> String {
         s.len() == 1
             && s.chars()
                 .next()
-                .map(|c| VALID_SINGLE_CHARS.contains(&c))
-                .unwrap_or(false)
+                .is_some_and(|c| VALID_SINGLE_CHARS.contains(&c))
     }
 
     fn is_purely_alpha(s: &str) -> bool {
-        !s.is_empty() && s.chars().all(|c| c.is_alphabetic())
+        !s.is_empty() && s.chars().all(char::is_alphabetic)
     }
 
     fn alpha_len(s: &str) -> usize {
@@ -174,7 +173,7 @@ pub fn fix_pdf_spacing(input: &str) -> String {
     fn is_short_fragment(word: &str) -> bool {
         let len = alpha_len(word);
         // 2-3 letter non-common words are definitely fragments
-        len >= 2 && len <= 3 && is_purely_alpha(word) && !is_common_word(word)
+        (2..=3).contains(&len) && is_purely_alpha(word) && !is_common_word(word)
     }
 
     fn is_likely_suffix(word: &str) -> bool {

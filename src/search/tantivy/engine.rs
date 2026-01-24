@@ -52,7 +52,7 @@ pub struct TantivySegmentBlob {
 impl TantivyEngine {
     pub fn create() -> Result<Self> {
         let dir = TempDir::new().map_err(|err| MemvidError::Tantivy {
-            reason: format!("failed to allocate Tantivy work directory: {}", err),
+            reason: format!("failed to allocate Tantivy work directory: {err}"),
         })?;
         let schema = build_schema();
         let index = Index::create_in_dir(dir.path(), schema.clone()).map_err(|err| {
@@ -161,7 +161,6 @@ impl TantivyEngine {
         if content.trim().is_empty() {
             return Ok(());
         }
-        if frame.id <= 20 || (frame.id % 100 == 0) {}
         let mut document = doc!(
             self.content => content,
             self.timestamp => frame.timestamp,
@@ -214,7 +213,7 @@ impl TantivyEngine {
 
     /// Soft commit that makes documents searchable immediately without waiting for merge.
     /// Used for instant indexing during progressive ingestion (Phase 1).
-    /// This is faster than full commit() but leaves segments unmerged.
+    /// This is faster than full `commit()` but leaves segments unmerged.
     pub fn soft_commit(&mut self) -> Result<()> {
         let writer = self.writer_mut()?;
         writer.commit().map_err(|err| MemvidError::Tantivy {
@@ -322,7 +321,7 @@ impl TantivyEngine {
     }
 
     pub fn snapshot_segments(&self) -> Result<TantivySnapshot> {
-        let mut entries =
+        let entries =
             std::fs::read_dir(self.work_dir.path()).map_err(|err| MemvidError::Tantivy {
                 reason: format!(
                     "failed to read Tantivy index directory {}: {}",
@@ -331,7 +330,7 @@ impl TantivyEngine {
                 ),
             })?;
         let mut file_names: Vec<String> = Vec::new();
-        while let Some(entry) = entries.next() {
+        for entry in entries {
             let entry = entry.map_err(|err| MemvidError::Tantivy {
                 reason: format!(
                     "failed to iterate Tantivy index directory {}: {}",

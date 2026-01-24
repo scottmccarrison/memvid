@@ -44,14 +44,11 @@ impl DocumentReader for DocxReader {
 
     fn supports(&self, hint: &ReaderHint<'_>) -> bool {
         matches!(hint.format, Some(DocumentFormat::Docx))
-            || hint
-                .mime
-                .map(|mime| {
-                    mime.eq_ignore_ascii_case(
-                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    )
-                })
-                .unwrap_or(false)
+            || hint.mime.is_some_and(|mime| {
+                mime.eq_ignore_ascii_case(
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                )
+            })
     }
 
     fn extract(&self, bytes: &[u8], hint: &ReaderHint<'_>) -> Result<ReaderOutput> {

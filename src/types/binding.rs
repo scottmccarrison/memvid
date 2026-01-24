@@ -26,7 +26,7 @@ pub struct MemoryBinding {
 /// which files are using a memory's capacity.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileInfo {
-    /// File name (e.g., "support_docs.mv2")
+    /// File name (e.g., "`support_docs.mv2`")
     pub file_name: String,
     /// Full file path
     pub file_path: String,
