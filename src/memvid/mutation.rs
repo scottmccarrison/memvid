@@ -923,64 +923,64 @@ impl Memvid {
                         let mut prepared_docs: Vec<(Frame, String)> = Vec::new();
 
                         for frame_id in &delta.inserted_frames {
-                        // Look up the actual Frame from the TOC
-                        let frame = match self.toc.frames.get(*frame_id as usize) {
-                            Some(f) => f.clone(),
-                            None => continue,
-                        };
+                            // Look up the actual Frame from the TOC
+                            let frame = match self.toc.frames.get(*frame_id as usize) {
+                                Some(f) => f.clone(),
+                                None => continue,
+                            };
 
-                        // Check if frame has explicit search_text first - clone it for ownership
-                        let explicit_text = frame.search_text.clone();
-                        if let Some(ref search_text) = explicit_text {
-                            if !search_text.trim().is_empty() {
-                                prepared_docs.push((frame, search_text.clone()));
+                            // Check if frame has explicit search_text first - clone it for ownership
+                            let explicit_text = frame.search_text.clone();
+                            if let Some(ref search_text) = explicit_text {
+                                if !search_text.trim().is_empty() {
+                                    prepared_docs.push((frame, search_text.clone()));
+                                    continue;
+                                }
+                            }
+
+                            // Get MIME type and check if text-indexable
+                            let mime = frame
+                                .metadata
+                                .as_ref()
+                                .and_then(|m| m.mime.as_deref())
+                                .unwrap_or("application/octet-stream");
+
+                            if !crate::memvid::search::is_text_indexable_mime(mime) {
                                 continue;
+                            }
+
+                            if frame.payload_length > max_payload {
+                                continue;
+                            }
+
+                            let text = self.frame_search_text(&frame)?;
+                            if !text.trim().is_empty() {
+                                prepared_docs.push((frame, text));
                             }
                         }
 
-                        // Get MIME type and check if text-indexable
-                        let mime = frame
-                            .metadata
-                            .as_ref()
-                            .and_then(|m| m.mime.as_deref())
-                            .unwrap_or("application/octet-stream");
+                        // Now add to Tantivy engine (no borrow conflict)
+                        if let Some(ref mut engine) = self.tantivy {
+                            for (frame, text) in &prepared_docs {
+                                engine.add_frame(frame, text)?;
+                            }
 
-                        if !crate::memvid::search::is_text_indexable_mime(mime) {
-                            continue;
+                            if !prepared_docs.is_empty() {
+                                engine.commit()?;
+                                self.tantivy_dirty = true;
+                            }
+
+                            tracing::info!(
+                                "parallel_commit: Tantivy incremental update, added={}, total_docs={}",
+                                prepared_docs.len(),
+                                engine.num_docs()
+                            );
+                        } else {
+                            tracing::warn!(
+                                "parallel_commit: Tantivy engine is None after init_tantivy"
+                            );
                         }
-
-                        if frame.payload_length > max_payload {
-                            continue;
-                        }
-
-                        let text = self.frame_search_text(&frame)?;
-                        if !text.trim().is_empty() {
-                            prepared_docs.push((frame, text));
-                        }
-                    }
-
-                    // Now add to Tantivy engine (no borrow conflict)
-                    if let Some(ref mut engine) = self.tantivy {
-                        for (frame, text) in &prepared_docs {
-                            engine.add_frame(frame, text)?;
-                        }
-
-                        if !prepared_docs.is_empty() {
-                            engine.commit()?;
-                            self.tantivy_dirty = true;
-                        }
-
-                        tracing::info!(
-                            "parallel_commit: Tantivy incremental update, added={}, total_docs={}",
-                            prepared_docs.len(),
-                            engine.num_docs()
-                        );
-                    } else {
-                        tracing::warn!(
-                            "parallel_commit: Tantivy engine is None after init_tantivy"
-                        );
-                    }
-                    }  // end of else !tantivy_was_present
+                    } // end of else !tantivy_was_present
                 }
 
                 // Time index stores all entries together for timeline queries.
@@ -3402,7 +3402,8 @@ impl Memvid {
             // Only add extractous_metadata when auto_tag is enabled
             // This allows callers to disable metadata pollution by setting auto_tag=false
             if options.auto_tag {
-                if let Some(meta_json) = (!doc.metadata.is_null()).then(|| doc.metadata.to_string()) {
+                if let Some(meta_json) = (!doc.metadata.is_null()).then(|| doc.metadata.to_string())
+                {
                     extra_metadata
                         .entry("extractous_metadata".to_string())
                         .or_insert(meta_json);
