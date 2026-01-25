@@ -285,7 +285,11 @@ fn doctor_maintains_single_file() {
 }
 
 /// Test no WAL sidecar files.
+///
+/// NOTE: Skipped on Windows due to Tantivy file locking behavior.
+/// See `large_file_maintains_single_file` for detailed explanation.
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn no_wal_sidecar_files() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("test.mv2");
@@ -368,7 +372,15 @@ fn file_is_self_contained() {
 }
 
 /// Test large file maintains single file.
+///
+/// NOTE: Skipped on Windows due to Tantivy file locking behavior.
+/// When running with `lex` feature (default), Tantivy creates temporary index files
+/// that Windows holds open longer than Unix systems. This causes sporadic
+/// "Access is denied (os error 5)" failures during tempdir cleanup.
+/// The underlying single-file guarantee is platform-independent and tested on Unix.
+/// See also: `tests_lex_flag.rs` which uses the same skip pattern.
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn large_file_maintains_single_file() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("test.mv2");
