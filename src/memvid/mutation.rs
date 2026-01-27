@@ -1020,6 +1020,7 @@ impl Memvid {
         }
 
         // Flush Tantivy index if dirty (from parallel path or pending updates)
+        #[cfg(feature = "lex")]
         if self.tantivy_dirty || (!indexes_rebuilt && self.tantivy_index_pending()) {
             self.flush_tantivy()?;
         }

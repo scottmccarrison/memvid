@@ -74,6 +74,7 @@ pub(crate) struct TantivySegmentArtifact {
     pub checksum: [u8; 32],
 }
 
+#[cfg(feature = "lex")]
 #[derive(Debug, Clone, Default)]
 #[allow(dead_code)]
 pub(crate) struct TantivySegmentDeltaEntry {
@@ -82,6 +83,7 @@ pub(crate) struct TantivySegmentDeltaEntry {
     pub artifact: Option<TantivySegmentArtifact>,
 }
 
+#[cfg(feature = "lex")]
 #[derive(Debug, Clone, Default)]
 #[allow(dead_code)]
 pub(crate) struct TantivySnapshotDelta {

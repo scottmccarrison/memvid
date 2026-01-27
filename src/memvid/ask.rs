@@ -1478,6 +1478,7 @@ fn promote_corrections(memvid: &mut Memvid, hits: &mut Vec<SearchHit>) -> Result
 /// Promote earliest/latest hits into the visible context so update/recency questions see both ends.
 /// Uses `content_dates` for temporal ordering (dates extracted from document content),
 /// falling back to frame.timestamp (ingestion time) if no content dates are available.
+#[cfg(feature = "lex")]
 fn promote_temporal_extremes(
     memvid: &mut Memvid,
     hits: &mut Vec<SearchHit>,

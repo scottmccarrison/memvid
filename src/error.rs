@@ -224,6 +224,7 @@ impl From<std::io::Error> for MemvidError {
     }
 }
 
+#[cfg(feature = "lex")]
 impl From<tantivy::TantivyError> for MemvidError {
     fn from(value: tantivy::TantivyError) -> Self {
         Self::Tantivy {
