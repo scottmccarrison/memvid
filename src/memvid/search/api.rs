@@ -739,6 +739,7 @@ impl Memvid {
             }
             self.file.seek(SeekFrom::Start(segment.bytes_offset))?;
             let mut remaining = segment.bytes_length;
+            let mut hasher = blake3::Hasher::new();
             while remaining > 0 {
                 // Safe: chunk is at most buffer.len() which is usize
                 #[allow(clippy::cast_possible_truncation)]
@@ -751,8 +752,16 @@ impl Memvid {
                         ),
                     });
                 }
+                hasher.update(&buffer[..chunk]);
                 writer.write_all(&buffer[..chunk])?;
                 remaining -= chunk as u64;
+            }
+            let actual_checksum = *hasher.finalize().as_bytes();
+            if actual_checksum != segment.checksum {
+                tracing::warn!(
+                    "Tantivy segment checksum mismatch for '{}': expected {:?}, got {:?}",
+                    segment.path, &segment.checksum[..8], &actual_checksum[..8]
+                );
             }
         }
         self.file.seek(SeekFrom::Start(cursor))?;
@@ -829,7 +838,6 @@ impl Memvid {
         } else {
             expected_docs != Some(actual_docs)
         };
-
         if needs_rebuild {
             if let Some(expected) = expected_docs {
                 if actual_docs != 0 || expected != 0 {
@@ -980,10 +988,12 @@ impl Memvid {
     pub(crate) fn rebuild_tantivy_engine(&mut self, engine: &mut TantivyEngine) -> Result<bool> {
         let mut prepared_docs: Vec<(Frame, String)> = Vec::new();
         let frames = self.toc.frames.clone();
+        tracing::info!("rebuild_tantivy_engine: total frames in toc: {}", frames.len());
         let active_frames: Vec<_> = frames
             .into_iter()
             .filter(|frame| frame.status == FrameStatus::Active)
             .collect();
+        tracing::info!("rebuild_tantivy_engine: active frames: {}", active_frames.len());
 
         let max_payload = max_index_payload();
 

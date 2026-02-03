@@ -162,3 +162,7 @@ harness = false
 name = "vec_search_benchmark"
 harness = false
 required-features = ["hnsw_bench"]
+
+[[bin]]
+name = "memvid"
+path = "src/bin/memvid.rs"

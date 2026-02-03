@@ -2433,9 +2433,9 @@ impl Memvid {
         for segment in segments {
             let bytes_length = segment.bytes.len() as u64;
             self.file.write_all(&segment.bytes)?;
-            self.file.flush()?; // Flush segment data to disk
+            self.file.flush()?;
             embedded_segments.push(EmbeddedLexSegment {
-                path: segment.path,
+                path: segment.path.clone(),
                 bytes_offset: footer_offset,
                 bytes_length,
                 checksum: segment.checksum,
@@ -2643,10 +2643,12 @@ impl Memvid {
     }
 
     pub(crate) fn capacity_limit(&self) -> u64 {
-        if self.toc.ticket_ref.capacity_bytes != 0 {
-            self.toc.ticket_ref.capacity_bytes
+        let tier_cap = self.tier().capacity_bytes();
+        let stored = self.toc.ticket_ref.capacity_bytes;
+        if stored != 0 && stored > tier_cap {
+            stored
         } else {
-            self.tier().capacity_bytes()
+            tier_cap
         }
     }
 

@@ -183,8 +183,9 @@ impl QueryPlanner<'_> {
         }
         let mut queries: Vec<Box<dyn Query>> = Vec::new();
         if tokens.len() == 1 {
+            let term = Term::from_field_text(self.engine.content, &tokens[0]);
             queries.push(Box::new(TermQuery::new(
-                Term::from_field_text(self.engine.content, &tokens[0]),
+                term,
                 IndexRecordOption::WithFreqsAndPositions,
             )));
         } else {
