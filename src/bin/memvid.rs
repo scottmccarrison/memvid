@@ -7,7 +7,25 @@ use std::fs;
 use std::io::{self, Read};
 use std::path::PathBuf;
 
+/// Global override set by --memory flag before command dispatch
+static MEMORY_PATH_OVERRIDE: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
 fn get_memory_path() -> PathBuf {
+    // 1. --memory CLI flag (highest priority)
+    if let Some(p) = MEMORY_PATH_OVERRIDE.get() {
+        return p.clone();
+    }
+    // 2. MEMVID_MEMORY env var
+    if let Ok(p) = env::var("MEMVID_MEMORY") {
+        let expanded = if p.starts_with('~') {
+            let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
+            p.replacen('~', &home, 1)
+        } else {
+            p
+        };
+        return PathBuf::from(expanded);
+    }
+    // 3. Default fallback
     let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
     PathBuf::from(home).join(".memvid").join("claude.mv2")
 }
@@ -524,25 +542,61 @@ fn cmd_embed_all() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn print_usage() {
-    eprintln!("Usage: memvid <command> [args]");
+    let path = get_memory_path();
+    eprintln!("Usage: memvid [--memory <path>] <command> [args]");
     eprintln!();
     eprintln!("Commands:");
     eprintln!("  save [--title <title>] [--tag key=value]... <content>");
     eprintln!("  save --stdin [--title <title>] [--tag key=value]...");
     eprintln!("  search <query> [--top <n>]");
     eprintln!("  stats");
+    eprintln!("  list [count]                             List recent frames");
+    eprintln!("  inspect <frame_id>                       Show frame details");
     #[cfg(feature = "vec")]
-    eprintln!("  embed-all                               Generate embeddings for all frames");
+    eprintln!("  embed-all                                Generate embeddings for all frames");
     #[cfg(feature = "vec")]
-    eprintln!("  doctor [--rebuild-lex] [--rebuild-vec]  Rebuild indexes");
+    eprintln!("  doctor [--rebuild-lex] [--rebuild-vec]   Rebuild indexes");
     eprintln!();
-    eprintln!("Memory is stored at ~/.memvid/claude.mv2");
+    eprintln!("Memory path (in priority order):");
+    eprintln!("  1. --memory <path>      CLI flag");
+    eprintln!("  2. $MEMVID_MEMORY       Environment variable");
+    eprintln!("  3. ~/.memvid/claude.mv2 Default");
+    eprintln!();
+    eprintln!("Active: {}", path.display());
     #[cfg(feature = "vec")]
-    eprintln!("\nHybrid search (lex + semantic) enabled.");
+    eprintln!("Hybrid search (lex + semantic) enabled.");
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let raw_args: Vec<String> = env::args().collect();
+
+    // Parse global --memory flag before command dispatch
+    let args: Vec<String> = {
+        let mut filtered = vec![raw_args[0].clone()];
+        let mut i = 1;
+        while i < raw_args.len() {
+            if raw_args[i] == "--memory" || raw_args[i] == "-m" {
+                if i + 1 < raw_args.len() {
+                    let p = &raw_args[i + 1];
+                    let expanded = if p.starts_with('~') {
+                        let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
+                        p.replacen('~', &home, 1)
+                    } else {
+                        p.clone()
+                    };
+                    let _ = MEMORY_PATH_OVERRIDE.set(PathBuf::from(expanded));
+                    i += 2;
+                    continue;
+                } else {
+                    eprintln!("Missing path for --memory flag");
+                    std::process::exit(1);
+                }
+            }
+            filtered.push(raw_args[i].clone());
+            i += 1;
+        }
+        filtered
+    };
 
     if args.len() < 2 {
         print_usage();
